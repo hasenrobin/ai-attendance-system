@@ -90,6 +90,19 @@ type UpdateCompanyResult = {
   error: string | null
 }
 
+// ── Platform Admin helpers ─────────────────────────────────────────────────
+
+type AdminCompany = Pick<Company, 'id' | 'name' | 'status'>
+
+export async function getAdminCompanies(): Promise<{ data: AdminCompany[]; error: string | null }> {
+  const { data, error } = await supabase
+    .from('companies')
+    .select('id, name, status')
+    .order('name', { ascending: true })
+  if (error) return { data: [], error: error.message }
+  return { data: (data ?? []) as AdminCompany[], error: null }
+}
+
 export async function updateCompany(
   companyId: string,
   updates: UpdateCompanyParams,

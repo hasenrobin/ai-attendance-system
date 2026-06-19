@@ -37,7 +37,7 @@ export function AdminShell({ children }: AdminShellProps) {
         padding: '0 var(--space-6)',
         zIndex: 100,
       }}>
-        {/* Logo / title */}
+        {/* Logo / title + nav */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
           <span style={{
             fontSize: 'var(--text-xs)',
@@ -51,26 +51,30 @@ export function AdminShell({ children }: AdminShellProps) {
           }}>
             Platform Admin
           </span>
-          <span style={{
-            width: '1px',
-            height: '14px',
-            backgroundColor: '#333',
-          }} />
-          <button
-            onClick={() => navigate('/admin')}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--color-text-muted)',
-              fontSize: 'var(--text-xs)',
-              cursor: 'pointer',
-              padding: 0,
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-            }}
-          >
-            Dashboard
-          </button>
+          <span style={{ width: '1px', height: '14px', backgroundColor: '#333' }} />
+          {[
+            { label: 'Dashboard', path: '/admin' },
+            { label: 'Cameras',   path: '/admin/cameras' },
+          ].map(item => (
+            <button
+              key={item.path}
+              onClick={() => navigate(item.path)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: window.location.pathname.startsWith(item.path) && (item.path !== '/admin' || window.location.pathname === '/admin')
+                  ? 'var(--color-gold)'
+                  : 'var(--color-text-muted)',
+                fontSize: 'var(--text-xs)',
+                cursor: 'pointer',
+                padding: 0,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
 
         {/* Right: user info + exit to /app */}

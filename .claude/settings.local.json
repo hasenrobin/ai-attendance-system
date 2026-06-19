@@ -114,7 +114,21 @@
       "Bash(curl -sf https://attendanceai.duckdns.org/assets/index-M0XC-QnL.js)",
       "Bash(ssh -i ~/.ssh/hetzner_ai_attendance -o StrictHostKeyChecking=no root@91.98.80.25 \"pm2 save 2>&1 | tail -2 && echo '=== Final PM2 state ===' && pm2 list\")",
       "Bash(git rm *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(ssh -i ~/.ssh/hetzner_ai_attendance -o StrictHostKeyChecking=no root@91.98.80.25 \"grep -o 'camera-proxy\\\\|127.0.0.1:8787' /var/www/ai-attendance/dist/assets/index-n3SDUPX2.js | head -5\")",
+      "Bash(cd \"c:\\\\Users\\\\Lenovo\\\\Desktop\\\\ai-attendance-system\" && cat ~/.supabase/access-token 2>/dev/null | head -1 || npx supabase --help 2>&1 | grep \"login\\\\|token\" | head -5)",
+      "Read(//c/Users/Lenovo/.supabase/**)",
+      "Bash(cd \"c:\\\\Users\\\\Lenovo\\\\Desktop\\\\ai-attendance-system\" && cat ~/.supabase/telemetry.json 2>/dev/null | grep -i \"token\\\\|key\\\\|auth\" | head -5 || echo \"---\" && ls ~/.config/supabase/ 2>/dev/null || echo \"NO_CONFIG_DIR\")",
+      "Read(//c/Users/Lenovo/.config/**)",
+      "Bash(find /c/Users/Lenovo -name \"access-token\" 2>/dev/null | grep supabase | head -5)",
+      "Read(//c/Users/Lenovo/**)",
+      "Bash(node -e \"const {execSync}=require\\('child_process'\\);try{console.log\\(execSync\\('supabase projects list --output json',{encoding:'utf-8'}\\).substring\\(0,50\\)\\)}catch\\(e\\){console.log\\('error'\\)}\")",
+      "Bash(curl -sf https://attendanceai.duckdns.org/assets/index-C1e1Yxhu.js)",
+      "Bash(ssh -i ~/.ssh/hetzner_ai_attendance -o StrictHostKeyChecking=no root@91.98.80.25 \"cd /var/www/ai-attendance && git pull origin main 2>&1\")",
+      "Bash(ssh -i ~/.ssh/hetzner_ai_attendance -o StrictHostKeyChecking=no root@91.98.80.25 \"nginx -t && systemctl reload nginx && echo 'NGINX_OK'\")",
+      "Bash(curl -sf -o /dev/null -w \"HTTP %{http_code}\" https://attendanceai.duckdns.org/admin)"
     ],
     "additionalDirectories": [
       "c:\\Users\\Lenovo\\.claude\\projects\\c--Users-Lenovo-Desktop-ai-attendance-system\\memory",
