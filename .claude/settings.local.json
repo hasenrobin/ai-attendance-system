@@ -112,7 +112,9 @@
       "Bash(curl -sf -o /dev/null -w \"HLS → HTTP %{http_code}\\\\n\" https://attendanceai.duckdns.org/camera-hls/cam-a1b2c3d4e5f6/index.m3u8)",
       "Bash(curl -sf https://attendanceai.duckdns.org/camera-hls/cam-a1b2c3d4e5f6/index.m3u8)",
       "Bash(curl -sf https://attendanceai.duckdns.org/assets/index-M0XC-QnL.js)",
-      "Bash(ssh -i ~/.ssh/hetzner_ai_attendance -o StrictHostKeyChecking=no root@91.98.80.25 \"pm2 save 2>&1 | tail -2 && echo '=== Final PM2 state ===' && pm2 list\")"
+      "Bash(ssh -i ~/.ssh/hetzner_ai_attendance -o StrictHostKeyChecking=no root@91.98.80.25 \"pm2 save 2>&1 | tail -2 && echo '=== Final PM2 state ===' && pm2 list\")",
+      "Bash(git rm *)",
+      "Bash(git add *)"
     ],
     "additionalDirectories": [
       "c:\\Users\\Lenovo\\.claude\\projects\\c--Users-Lenovo-Desktop-ai-attendance-system\\memory",
