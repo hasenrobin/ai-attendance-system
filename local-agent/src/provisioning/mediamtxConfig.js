@@ -1,0 +1,87 @@
+import { promises as fs } from 'node:fs'
+import path from 'node:path'
+import { parseDocument } from 'yaml'
+import {
+  FFMPEG_PATH,
+  MEDIAMTX_API_BASE,
+  MEDIAMTX_API_TIMEOUT_MS,
+  MEDIAMTX_RTSP_BASE,
+  MEDIAMTX_YML_PATH,
+  buildTranscodeArgs,
+} from './config.js'
+
+export class MediaMtxApiError extends Error {
+  constructor(message) {
+    super(message)
+    this.name = 'MediaMtxApiError'
+  }
+}
+
+export function pathNameFor(cameraId) {
+  return `cam-${cameraId.replace(/-/g, '').slice(0, 12)}`
+}
+
+// Passthrough: MediaMTX pulls the camera's RTSP stream directly.
+// Transcode: ffmpeg re-encodes to H.264/AAC and republishes to this same
+// path, mirroring the hand-authored `grandsecu` entry in mediamtx.yml.
+export function buildPathConfig({ rtspUrlWithCreds, pathName, transcode }) {
+  if (!transcode) {
+    return { source: rtspUrlWithCreds, sourceOnDemand: false }
+  }
+
+  const outputUrl = `${MEDIAMTX_RTSP_BASE}/${pathName}`
+  const args = buildTranscodeArgs(rtspUrlWithCreds, outputUrl)
+  const runOnInit = [FFMPEG_PATH, ...args].join(' ')
+  return { runOnInit, runOnInitRestart: true }
+}
+
+async function apiFetch(url, options = {}) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), MEDIAMTX_API_TIMEOUT_MS)
+  try {
+    return await fetch(url, { ...options, signal: controller.signal })
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new MediaMtxApiError('MediaMTX API did not respond in time — is the proxy running with `api: yes`?')
+    }
+    throw new MediaMtxApiError(`Could not reach MediaMTX API at ${MEDIAMTX_API_BASE} — is the proxy running?`)
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+// Applies a path config to the running MediaMTX instance for immediate
+// effect. This does NOT persist to mediamtx.yml — see persistToYaml.
+export async function applyViaApi(pathName, cfg) {
+  const getResp = await apiFetch(`${MEDIAMTX_API_BASE}/v3/config/paths/get/${pathName}`)
+  const exists = getResp.status === 200
+
+  const action = exists ? 'replace' : 'add'
+  const resp = await apiFetch(`${MEDIAMTX_API_BASE}/v3/config/paths/${action}/${pathName}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cfg),
+  })
+
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => '')
+    throw new MediaMtxApiError(`MediaMTX API rejected the path config (${resp.status}): ${body || resp.statusText}`)
+  }
+}
+
+// Best-effort read-modify-write of mediamtx.yml's `paths:` section so the
+// new path survives a MediaMTX restart. Throws on failure — callers should
+// treat this as non-fatal (record it in `warnings[]`), since applyViaApi
+// already made the stream live.
+export async function persistToYaml(pathName, cfg) {
+  const raw = await fs.readFile(MEDIAMTX_YML_PATH, 'utf8')
+  const doc = parseDocument(raw)
+  doc.setIn(['paths', pathName], cfg)
+
+  const tmpPath = path.join(
+    path.dirname(MEDIAMTX_YML_PATH),
+    `.${path.basename(MEDIAMTX_YML_PATH)}.tmp-${process.pid}`,
+  )
+  await fs.writeFile(tmpPath, doc.toString(), 'utf8')
+  await fs.rename(tmpPath, MEDIAMTX_YML_PATH)
+}

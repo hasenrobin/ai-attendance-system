@@ -7,7 +7,7 @@ import type {
 } from '../../types/integration'
 
 const SOURCE_COLUMNS =
-  'id, company_id, branch_id, camera_id, source_type, source_name, status, external_system_id, api_key_hash, api_key_prefix, metadata, created_by, created_at, updated_at'
+  'id, company_id, branch_id, camera_id, source_type, source_name, status, external_system_id, api_key_hash, api_key_prefix, key_version, metadata, created_by, created_at, updated_at'
 
 const SOURCE_EVENT_COLUMNS =
   'id, source_id, company_id, branch_id, employee_id, external_employee_id, external_event_id, event_time, raw_event_type, confidence_score, snapshot_url, raw_payload, dedupe_hash, processing_status, processing_error, attendance_event_id, created_at, processed_at'
@@ -48,7 +48,8 @@ type CreateSourceParams = {
 }
 
 export async function createAttendanceSource(params: CreateSourceParams): Promise<ApiKeyResult> {
-  const { apiKey, hash, prefix } = await generateApiKey()
+  const keyResult = await generateApiKeyServerSide()
+  if (!keyResult) return { data: null, error: 'Failed to generate API key from server.', apiKey: null }
 
   const { data, error } = await supabase
     .from('attendance_sources')
@@ -56,14 +57,15 @@ export async function createAttendanceSource(params: CreateSourceParams): Promis
       status: 'active',
       metadata: {},
       ...params,
-      api_key_hash: hash,
-      api_key_prefix: prefix,
+      api_key_hash: keyResult.hash,
+      api_key_prefix: keyResult.prefix,
+      key_version: keyResult.key_version,
     })
     .select(SOURCE_COLUMNS)
     .single()
 
   if (error) return { data: null, error: error.message, apiKey: null }
-  return { data: data as AttendanceSource, error: null, apiKey }
+  return { data: data as AttendanceSource, error: null, apiKey: keyResult.apiKey }
 }
 
 type UpdateSourceParams = Partial<Pick<AttendanceSource,
@@ -100,17 +102,23 @@ export async function activateAttendanceSource(sourceId: string): Promise<Source
 
 /** Generates a new API key for an existing source, replacing the previous one. */
 export async function regenerateAttendanceSourceApiKey(sourceId: string): Promise<ApiKeyResult> {
-  const { apiKey, hash, prefix } = await generateApiKey()
+  const keyResult = await generateApiKeyServerSide()
+  if (!keyResult) return { data: null, error: 'Failed to generate API key from server.', apiKey: null }
 
   const { data, error } = await supabase
     .from('attendance_sources')
-    .update({ api_key_hash: hash, api_key_prefix: prefix, updated_at: new Date().toISOString() })
+    .update({
+      api_key_hash: keyResult.hash,
+      api_key_prefix: keyResult.prefix,
+      key_version: keyResult.key_version,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', sourceId)
     .select(SOURCE_COLUMNS)
     .single()
 
   if (error) return { data: null, error: error.message, apiKey: null }
-  return { data: data as AttendanceSource, error: null, apiKey }
+  return { data: data as AttendanceSource, error: null, apiKey: keyResult.apiKey }
 }
 
 // ── Source Events (read-only) ───────────────────────────────────
@@ -143,18 +151,21 @@ export async function getIntegrationLogs(companyId: string, limit = 50): Promise
 
 // ── API key generation ───────────────────────────────────────────
 
+type ServerKeyResult = { apiKey: string; hash: string; prefix: string; key_version: string }
+
 /**
- * Generates a random 32-byte API key (hex-encoded) plus its SHA-256 hash and
- * an 8-character prefix. Only the hash is stored (attendance_sources.api_key_hash);
- * the plaintext key is shown to the user once and never persisted.
+ * Requests a peppered API key from the attendance-ingest Edge Function.
+ * The pepper never leaves the server runtime — only the hash is stored.
+ * Returns null on any error (caller should surface to the user).
  */
-async function generateApiKey(): Promise<{ apiKey: string; hash: string; prefix: string }> {
-  const bytes = new Uint8Array(32)
-  crypto.getRandomValues(bytes)
-  const apiKey = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
-
-  const digestBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(apiKey))
-  const hash = Array.from(new Uint8Array(digestBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
-
-  return { apiKey, hash, prefix: apiKey.slice(0, 8) }
+async function generateApiKeyServerSide(): Promise<ServerKeyResult | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke('attendance-ingest', {
+      body: { action: 'generate_source_key' },
+    })
+    if (error || !data?.apiKey) return null
+    return data as ServerKeyResult
+  } catch {
+    return null
+  }
 }

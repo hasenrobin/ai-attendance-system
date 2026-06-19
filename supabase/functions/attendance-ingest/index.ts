@@ -25,7 +25,7 @@
 // ============================================================================
 
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { buildDateRange, generateEmployeeDailyAttendanceSummary } from '../_shared/attendanceRecalc.ts'
+import { buildDateRange, generateEmployeeDailyAttendanceSummary, toLocalDate } from '../_shared/attendanceRecalc.ts'
 
 // V1: hardcoded duplicate-detection window. Not yet configurable per company.
 const DEDUPE_WINDOW_SECONDS = 120
@@ -85,6 +85,7 @@ async function logIntegration(supabase: SupabaseClient, params: LogParams): Prom
 }
 
 type IngestPayload = {
+  action?: string
   source_id?: string
   source_key?: string
   employee_number?: string
@@ -105,6 +106,34 @@ type AttendanceSourceRow = {
   source_type: string
   source_name: string
   status: string
+  key_version: string
+}
+
+// ── generate_source_key action ────────────────────────────────────────────────
+// Generates a peppered API key server-side so the plaintext pepper never
+// leaves the Edge Function runtime. Requires a valid Supabase user session.
+// Returns { apiKey, hash, prefix, key_version: 'v2' }.
+async function handleGenerateSourceKey(
+  req: Request,
+  supabaseUrl: string,
+  anonKey: string,
+  pepper: string,
+): Promise<Response> {
+  const userClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: req.headers.get('authorization') ?? '' } },
+  })
+  const { data: userData, error: userError } = await userClient.auth.getUser()
+  if (userError || !userData.user) {
+    return jsonResponse({ error: 'Authentication required.' }, 401)
+  }
+
+  const bytes = new Uint8Array(32)
+  crypto.getRandomValues(bytes)
+  const apiKey = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+  const hash = await sha256Hex(`att-source-key:${apiKey}:${pepper}`)
+  const prefix = apiKey.slice(0, 8)
+
+  return jsonResponse({ apiKey, hash, prefix, key_version: 'v2' })
 }
 
 Deno.serve(async (req: Request) => {
@@ -115,10 +144,12 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Method not allowed. Use POST.' }, 405)
   }
 
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-  )
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+  const sourceKeyPepper = Deno.env.get('ATTENDANCE_SOURCE_KEY_PEPPER') ?? ''
+
+  const supabase = createClient(supabaseUrl, serviceRoleKey)
 
   // ── Parse payload ─────────────────────────────────────────────────────
   let payload: IngestPayload
@@ -126,6 +157,14 @@ Deno.serve(async (req: Request) => {
     payload = await req.json()
   } catch {
     return jsonResponse({ error: 'Invalid JSON body.' }, 400)
+  }
+
+  // ── generate_source_key action (browser-authenticated, not device-key auth) ─
+  if (payload.action === 'generate_source_key') {
+    if (!sourceKeyPepper) {
+      return jsonResponse({ error: 'Source key pepper is not configured.' }, 500)
+    }
+    return handleGenerateSourceKey(req, supabaseUrl, anonKey, sourceKeyPepper)
   }
 
   // ── Phase 3: Resolve + authenticate the source ──────────────────────────
@@ -142,29 +181,49 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Missing source API key.' }, 401)
   }
 
-  const apiKeyHash = await sha256Hex(apiKey)
+  // Support both v2 (peppered) and v1 (plain SHA-256) hashes.
+  // Try v2 first when pepper is configured, fall back to v1 for legacy keys.
+  let sourceRow: AttendanceSourceRow | null = null
+  let sourceError: { message: string } | null = null
 
-  const { data: sourceRow, error: sourceError } = await supabase
-    .from('attendance_sources')
-    .select('id, company_id, branch_id, camera_id, source_type, source_name, status')
-    .eq('api_key_hash', apiKeyHash)
-    .maybeSingle()
+  if (sourceKeyPepper) {
+    const v2Hash = await sha256Hex(`att-source-key:${apiKey}:${sourceKeyPepper}`)
+    const { data, error } = await supabase
+      .from('attendance_sources')
+      .select('id, company_id, branch_id, camera_id, source_type, source_name, status, key_version')
+      .eq('api_key_hash', v2Hash)
+      .maybeSingle()
+    sourceError = error ?? null
+    sourceRow = (data ?? null) as AttendanceSourceRow | null
+  }
+
+  if (!sourceError && !sourceRow) {
+    const v1Hash = await sha256Hex(apiKey)
+    const { data, error } = await supabase
+      .from('attendance_sources')
+      .select('id, company_id, branch_id, camera_id, source_type, source_name, status, key_version')
+      .eq('api_key_hash', v1Hash)
+      .maybeSingle()
+    sourceError = error ?? null
+    sourceRow = (data ?? null) as AttendanceSourceRow | null
+  }
 
   if (sourceError) {
     return jsonResponse({ error: 'Failed to resolve attendance source.' }, 500)
   }
 
   if (!sourceRow) {
+    const fallbackHash = await sha256Hex(apiKey)
     await logIntegration(supabase, {
       log_level: 'error',
       event_type: 'auth_invalid_key',
       message: 'No attendance_sources row matches the provided API key.',
-      details: { api_key_hash_prefix: apiKeyHash.slice(0, 8) },
+      details: { api_key_hash_prefix: fallbackHash.slice(0, 8) },
     })
     return jsonResponse({ error: 'Invalid source API key.' }, 401)
   }
 
-  const source = sourceRow as AttendanceSourceRow
+  const source = sourceRow
 
   if (source.status !== 'active') {
     await logIntegration(supabase, {
@@ -333,10 +392,13 @@ Deno.serve(async (req: Request) => {
   const windowStartIso = new Date(eventTimeMs - DEDUPE_WINDOW_SECONDS * 1000).toISOString()
   const windowEndIso = new Date(eventTimeMs + DEDUPE_WINDOW_SECONDS * 1000).toISOString()
 
+  // Cross-source dedupe: check across ALL sources for this employee within the
+  // window. Prevents double check-in when two devices (e.g. camera + fingerprint)
+  // report the same employee within DEDUPE_WINDOW_SECONDS.
   const { data: priorEvents, error: priorError } = await supabase
     .from('attendance_source_events')
     .select('id')
-    .eq('source_id', source.id)
+    .eq('company_id', source.company_id)
     .eq('employee_id', matchedEmployee.id)
     .eq('processing_status', 'processed')
     .gte('event_time', windowStartIso)
@@ -365,7 +427,7 @@ Deno.serve(async (req: Request) => {
       .update({
         processing_status: 'duplicate',
         employee_id: matchedEmployee.id,
-        processing_error: `Duplicate of source_event ${duplicateOf} within ${DEDUPE_WINDOW_SECONDS}s window.`,
+        processing_error: `Cross-source duplicate of source_event ${duplicateOf} within ${DEDUPE_WINDOW_SECONDS}s window.`,
         processed_at: new Date().toISOString(),
       })
       .eq('id', sourceEvent.id)
@@ -377,19 +439,24 @@ Deno.serve(async (req: Request) => {
       source_event_id: sourceEvent.id,
       log_level: 'info',
       event_type: 'duplicate_event',
-      message: `Duplicate of source_event ${duplicateOf} within ${DEDUPE_WINDOW_SECONDS}s window.`,
+      message: `Cross-source duplicate of source_event ${duplicateOf} within ${DEDUPE_WINDOW_SECONDS}s window.`,
     })
     return jsonResponse({ status: 'duplicate', source_event_id: sourceEvent.id, duplicate_of: duplicateOf }, 200)
   }
 
   // ── Phase 7: Check-in / check-out decision ────────────────────────────
-  // V1 rules (documented limitation: UTC calendar day, not company/branch timezone):
-  //   - no prior attendance_events today          -> check_in
-  //   - last attendance_event today is check_in   -> check_out
-  //   - last attendance_event today is check_out  -> check_in
-  //   - last attendance_event today is any other type -> check_in
-  const attendanceDate = eventTimeIso.slice(0, 10)
-  const { startIso, endIso } = buildDateRange(attendanceDate)
+  // Fetch the company's IANA timezone from company_settings so the calendar
+  // day is computed in the company's local time rather than UTC.
+  const { data: settingsRow } = await supabase
+    .from('company_settings')
+    .select('timezone')
+    .eq('company_id', source.company_id)
+    .maybeSingle()
+  const companyTimezone: string = (settingsRow as { timezone?: string } | null)?.timezone ?? 'UTC'
+
+  // Use local calendar date for this company's timezone
+  const attendanceDate = toLocalDate(eventTimeIso, companyTimezone)
+  const { startIso, endIso } = buildDateRange(attendanceDate, companyTimezone)
 
   const { data: dayEvents, error: dayEventsError } = await supabase
     .from('attendance_events')
@@ -482,6 +549,7 @@ Deno.serve(async (req: Request) => {
     companyId: source.company_id,
     employeeId: matchedEmployee.id,
     attendanceDate,
+    timezone: companyTimezone,
   })
 
   if (recalcError) {

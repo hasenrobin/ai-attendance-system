@@ -57,14 +57,69 @@ export const HEARTBEAT_INTERVAL_MS  = Number(optional('AGENT_HEARTBEAT_INTERVAL_
 export const SCAN_TIMEOUT_MS        = Number(optional('AGENT_SCAN_TIMEOUT_MS',    '300000'))
 export const SCAN_CONCURRENCY       = Number(optional('AGENT_SCAN_CONCURRENCY',   '30'))
 
+// Local provisioning API. The frontend talks to this same contract via
+// src/features/cameras/provisioningService.ts.
+export const PROVISIONING_API_HOST = optional('PROVISIONING_API_HOST', '127.0.0.1')
+export const PROVISIONING_API_PORT = Number(optional('PROVISIONING_API_PORT', '8787'))
+
+// Secret for the POST /shutdown endpoint. If empty, /shutdown returns 404 (disabled).
+// Callers must pass this value in the X-Shutdown-Token header.
+export const PROVISIONING_SHUTDOWN_SECRET = optional('PROVISIONING_SHUTDOWN_SECRET', '')
+
+const extraOrigins = optional('CAMERA_PROXY_ALLOWED_ORIGINS', '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean)
+
+export const ALLOWED_ORIGINS = new Set([
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  ...extraOrigins,
+])
+
+// Local MediaMTX/ffmpeg provisioning. Defaults point at the existing
+// camera-proxy/ folder in this repo for the manual MVP trial.
+export const MEDIAMTX_DIR = optional('MEDIAMTX_DIR', path.resolve(AGENT_ROOT, '..', 'camera-proxy'))
+export const MEDIAMTX_YML_PATH = optional('MEDIAMTX_YML_PATH', path.join(MEDIAMTX_DIR, 'mediamtx.yml'))
+export const MEDIAMTX_API_BASE = optional('MEDIAMTX_API_BASE', 'http://127.0.0.1:9997')
+export const MEDIAMTX_HLS_BASE = optional('MEDIAMTX_HLS_BASE', 'http://localhost:8888')
+export const MEDIAMTX_HLS_PUBLIC_URL_LOCAL = optional('MEDIAMTX_HLS_PUBLIC_URL', MEDIAMTX_HLS_BASE)
+export const MEDIAMTX_RTSP_BASE = optional('MEDIAMTX_RTSP_BASE', 'rtsp://localhost:8554')
+export const MEDIAMTX_AUTO_START = optional('MEDIAMTX_AUTO_START', 'true') !== 'false'
+export const MEDIAMTX_EXECUTABLE = optional(
+  'MEDIAMTX_EXECUTABLE',
+  process.platform === 'win32' ? path.join(MEDIAMTX_DIR, 'mediamtx.exe') : 'mediamtx',
+)
+export const FFPROBE_PATH = optional(
+  'FFPROBE_PATH',
+  process.platform === 'win32' ? path.join(MEDIAMTX_DIR, 'ffprobe.exe') : 'ffprobe',
+)
+export const LOCAL_FFMPEG_PATH = optional(
+  'FFMPEG_PATH',
+  process.platform === 'win32' ? path.join(MEDIAMTX_DIR, 'ffmpeg.exe') : 'ffmpeg',
+)
+
+export const FFPROBE_TIMEOUT_MS = Number(optional('FFPROBE_TIMEOUT_MS', '10000'))
+export const MEDIAMTX_API_TIMEOUT_MS = Number(optional('MEDIAMTX_API_TIMEOUT_MS', '5000'))
+export const HLS_VERIFY_TIMEOUT_MS = Number(optional('HLS_VERIFY_TIMEOUT_MS', '25000'))
+export const HLS_VERIFY_INTERVAL_MS = Number(optional('HLS_VERIFY_INTERVAL_MS', '1500'))
+export const ONVIF_DEFAULT_PORT = Number(optional('ONVIF_DEFAULT_PORT', '80'))
+export const ONVIF_DEFAULT_PATH = optional('ONVIF_DEFAULT_PATH', '/onvif/device_service')
+export const ONVIF_CONNECT_TIMEOUT_MS = Number(optional('ONVIF_CONNECT_TIMEOUT_MS', '8000'))
+export const RTSP_DEFAULT_PORT = Number(optional('RTSP_DEFAULT_PORT', '554'))
+export const NVR_PARENT_CHECK_TIMEOUT_MS = Number(optional('NVR_PARENT_CHECK_TIMEOUT_MS', '4000'))
+export const ENABLE_CLOUD_STREAM_MANAGER = optional('ENABLE_CLOUD_STREAM_MANAGER', 'false') === 'true'
+
 // ── Option A: Stream to Cloud MediaMTX ───────────────────────────────────────
 // The cloud MediaMTX RTSP endpoint this agent publishes streams TO.
 // Must be publicly reachable (port 8554 open on the cloud server).
-export const MEDIAMTX_RTSP_PUBLISH_URL = optional('MEDIAMTX_RTSP_PUBLISH_URL', 'rtsp://91.98.80.25:8554')
+// Example: MEDIAMTX_RTSP_PUBLISH_URL=rtsp://your-cloud-server:8554
+export const MEDIAMTX_RTSP_PUBLISH_URL = optional('MEDIAMTX_RTSP_PUBLISH_URL', '')
 
 // The public base URL where the cloud MediaMTX serves HLS.
 // Stored in cameras.live_stream_url so the browser can play the stream.
-export const MEDIAMTX_HLS_PUBLIC_URL = optional('MEDIAMTX_HLS_PUBLIC_URL', 'http://91.98.80.25/camera-hls')
+// Example: MEDIAMTX_HLS_PUBLIC_URL=http://your-cloud-server/camera-hls
+export const MEDIAMTX_HLS_PUBLIC_URL = optional('MEDIAMTX_HLS_PUBLIC_URL', '')
 
 // Path to the ffmpeg binary on the agent machine.
 // On Linux: 'ffmpeg' (system install).  On Windows: full path to ffmpeg.exe.

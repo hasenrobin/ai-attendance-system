@@ -20,6 +20,7 @@ export type AttendanceSource = {
   external_system_id: string | null
   api_key_hash: string | null
   api_key_prefix: string | null
+  key_version: 'v1' | 'v2'
   metadata: Record<string, unknown>
   created_by: string | null
   created_at: string

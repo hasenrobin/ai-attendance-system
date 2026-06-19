@@ -6,8 +6,8 @@
 // No VPN, no port forwarding on the customer side required.
 //
 // Flow:
-//   Camera (192.168.x.x:554) → ffmpeg (local) → MediaMTX (91.98.80.25:8554)
-//   → HLS (91.98.80.25/camera-hls/cam-xxx/index.m3u8) → Browser
+//   Camera (192.168.x.x:554) → ffmpeg (local) → MediaMTX (<MEDIAMTX_RTSP_PUBLISH_URL>)
+//   → HLS (<MEDIAMTX_HLS_PUBLIC_URL>/cam-xxx/index.m3u8) → Browser
 //
 // The manager:
 //   1. Polls Supabase for cameras with LAN RTSP URLs and no live_stream_url
@@ -255,6 +255,12 @@ async function syncStreams() {
 // ── Public API ──────────────────────────────────────────────────────────────
 
 export function startStreamManager() {
+  if (!MEDIAMTX_RTSP_PUBLISH_URL || !MEDIAMTX_HLS_PUBLIC_URL) {
+    throw new Error(
+      '[stream] MEDIAMTX_RTSP_PUBLISH_URL and MEDIAMTX_HLS_PUBLIC_URL must be set to use the cloud stream manager. ' +
+      'Set ENABLE_CLOUD_STREAM_MANAGER=false to disable it.',
+    )
+  }
   console.log(`[stream] Stream manager started. MediaMTX publish: ${MEDIAMTX_RTSP_PUBLISH_URL}`)
 
   // Initial sync

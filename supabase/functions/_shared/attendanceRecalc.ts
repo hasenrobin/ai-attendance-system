@@ -50,12 +50,84 @@ type AttendanceEventRow = {
 export type GenerateDailyAttendanceSummaryParams = {
   companyId: string
   employeeId: string
-  attendanceDate: string // YYYY-MM-DD
+  attendanceDate: string // YYYY-MM-DD in company local time
+  timezone?: string      // IANA timezone (e.g. 'Asia/Riyadh'). Falls back to UTC if omitted.
 }
 
 type GenerateDailyAttendanceSummaryResult = {
   data: Record<string, unknown> | null
   error: string | null
+}
+
+// ── Timezone helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Returns the local date (YYYY-MM-DD) for a UTC ISO string in an IANA timezone.
+ * Uses en-CA locale which produces YYYY-MM-DD format natively.
+ */
+export function toLocalDate(utcIso: string, iana: string): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: iana }).format(new Date(utcIso))
+}
+
+/**
+ * Returns local time as total minutes (0-1439) for a UTC ISO string in an IANA timezone.
+ * Used to compare check-in time against shift start_time (which is stored as local HH:MM).
+ */
+function toLocalTimeMinutes(utcIso: string, iana: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: iana,
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  }).formatToParts(new Date(utcIso))
+  const h = Number(parts.find(p => p.type === 'hour')?.value ?? '0') % 24
+  const m = Number(parts.find(p => p.type === 'minute')?.value ?? '0')
+  return h * 60 + m
+}
+
+/**
+ * Returns {startIso, endIso} as UTC ISO strings that bracket the full 24-hour
+ * local calendar day `localDate` (YYYY-MM-DD) in the given IANA timezone.
+ *
+ * Technique: derive the UTC offset from noon UTC (DST-safe reference point),
+ * then shift UTC midnight by that offset.
+ */
+export function buildTimezoneAwareDateRange(
+  localDate: string,
+  iana: string,
+): { startIso: string; endIso: string } {
+  const [y, m, d] = localDate.split('-').map(Number)
+
+  // Use noon UTC as reference — far enough from any DST transition (02:00 local).
+  const noonUtcMs = Date.UTC(y, m - 1, d, 12, 0, 0)
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: iana,
+    year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: 'numeric', minute: 'numeric', second: 'numeric',
+    hour12: false,
+  }).formatToParts(new Date(noonUtcMs))
+
+  const get = (type: string) =>
+    Number(parts.find(p => p.type === type)?.value ?? '0')
+
+  const localHourAtNoon = get('hour') % 24
+  const localDayAtNoon  = get('day')
+  // localDayAtNoon can exceed d by 1 for UTC+12/+14 (noon UTC = next local day)
+  const dayDiff = localDayAtNoon > d + 5 ? -1 : localDayAtNoon < d - 5 ? 1 : localDayAtNoon - d
+
+  const offsetMs =
+    ((localHourAtNoon - 12) + dayDiff * 24) * 3_600_000 +
+    get('minute') * 60_000 +
+    get('second') * 1_000
+
+  // Local midnight = UTC midnight of localDate minus the UTC offset
+  const startMs = Date.UTC(y, m - 1, d, 0, 0, 0) - offsetMs
+  const endMs   = startMs + 24 * 60 * 60 * 1_000
+
+  return {
+    startIso: new Date(startMs).toISOString(),
+    endIso:   new Date(endMs).toISOString(),
+  }
 }
 
 // ── Helpers (ported verbatim from attendanceEngineService.ts) ─────────────
@@ -64,7 +136,12 @@ function parseDateTime(value: string): Date {
   return new Date(value)
 }
 
-export function buildDateRange(attendanceDate: string): { startIso: string; endIso: string } {
+export function buildDateRange(
+  attendanceDate: string,
+  timezone?: string,
+): { startIso: string; endIso: string } {
+  if (timezone) return buildTimezoneAwareDateRange(attendanceDate, timezone)
+  // Legacy UTC path — kept for backward compatibility when timezone is unknown
   const start = new Date(`${attendanceDate}T00:00:00.000Z`)
   const end = new Date(start)
   end.setUTCDate(end.getUTCDate() + 1)
@@ -129,7 +206,7 @@ export async function generateEmployeeDailyAttendanceSummary(
   supabase: SupabaseClient,
   params: GenerateDailyAttendanceSummaryParams,
 ): Promise<GenerateDailyAttendanceSummaryResult> {
-  const { companyId, employeeId, attendanceDate } = params
+  const { companyId, employeeId, attendanceDate, timezone } = params
 
   const { data: employee, error: employeeError } = await supabase
     .from('employees')
@@ -168,7 +245,7 @@ export async function generateEmployeeDailyAttendanceSummary(
     shift = (shiftRow ?? null) as Shift | null
   }
 
-  const { startIso, endIso } = buildDateRange(attendanceDate)
+  const { startIso, endIso } = buildDateRange(attendanceDate, timezone)
   const { data: eventsRaw, error: eventsError } = await supabase
     .from('attendance_events')
     .select('event_type, event_time')
@@ -197,8 +274,10 @@ export async function generateEmployeeDailyAttendanceSummary(
 
   let totalLateMinutes = 0
   if (shift && firstCheckIn) {
-    const checkInDate = parseDateTime(firstCheckIn)
-    const checkInMinutes = checkInDate.getUTCHours() * 60 + checkInDate.getUTCMinutes()
+    // Use local time for late-minutes comparison; shift.start_time is stored as local HH:MM
+    const checkInMinutes = timezone
+      ? toLocalTimeMinutes(firstCheckIn, timezone)
+      : parseDateTime(firstCheckIn).getUTCHours() * 60 + parseDateTime(firstCheckIn).getUTCMinutes()
     const allowedMinutes = timeToMinutes(shift.start_time) + (shift.grace_minutes ?? 0)
     if (checkInMinutes > allowedMinutes) {
       totalLateMinutes = checkInMinutes - allowedMinutes
