@@ -26,6 +26,11 @@ type AgentApiPayload = {
   version?: string
   capabilities?: string[]
   metadata?: Record<string, unknown>
+  // Provision job fields (Phase 3E Slice A)
+  camera_id?: string
+  job_type?: string
+  provision_mode?: string | null
+  result?: Record<string, unknown> | null
 }
 
 type CustomerAgentRow = {
@@ -44,6 +49,24 @@ type DiscoveryJobRow = {
   status: string
   scan_range: string | null
   devices_found: number
+}
+
+type ProvisionJobRow = {
+  id: string
+  company_id: string
+  branch_id: string | null
+  customer_agent_id: string
+  camera_id: string
+  job_type: string
+  provision_mode: string | null
+  status: string
+  result: Record<string, unknown> | null
+  error_message: string | null
+  timeout_at: string | null
+  created_by: string | null
+  created_at: string
+  started_at: string | null
+  completed_at: string | null
 }
 
 function requestIp(req: Request): string | null {
@@ -730,6 +753,342 @@ async function agentCompleteJob(
   return jsonResponse({ status: nextStatus, job })
 }
 
+// ── Phase 3E: Camera Provision Jobs ──────────────────────────────────────────
+
+const PROVISION_JOB_TIMEOUT_MINUTES = 5
+
+function provisionJobSelect(): string {
+  return 'id, company_id, branch_id, customer_agent_id, camera_id, job_type, provision_mode, status, result, error_message, timeout_at, created_by, created_at, started_at, completed_at'
+}
+
+// Admin: create a provision or validate_nvr job for a specific camera + agent.
+async function createProvisionJob(
+  supabase: SupabaseClient,
+  req: Request,
+  payload: AgentApiPayload,
+  adminUserId: string,
+): Promise<Response> {
+  const companyId     = payload.company_id?.trim()
+  const customerAgentId = payload.customer_agent_id?.trim()
+  const cameraId      = payload.camera_id?.trim()
+  const jobType       = payload.job_type?.trim()
+  const provisionMode = payload.provision_mode?.trim() || null
+
+  if (!companyId)       return jsonResponse({ error: 'company_id is required.' }, 400)
+  if (!customerAgentId) return jsonResponse({ error: 'customer_agent_id is required.' }, 400)
+  if (!cameraId)        return jsonResponse({ error: 'camera_id is required.' }, 400)
+  if (!jobType || !['provision', 'validate_nvr'].includes(jobType)) {
+    return jsonResponse({ error: 'job_type must be "provision" or "validate_nvr".' }, 400)
+  }
+  if (jobType === 'provision' && !provisionMode) {
+    return jsonResponse({ error: 'provision_mode is required when job_type is "provision".' }, 400)
+  }
+  if (jobType === 'provision' && !['direct_rtsp', 'onvif', 'nvr_channel'].includes(provisionMode ?? '')) {
+    return jsonResponse({ error: 'provision_mode must be "direct_rtsp", "onvif", or "nvr_channel".' }, 400)
+  }
+  if (jobType === 'validate_nvr' && provisionMode !== null) {
+    return jsonResponse({ error: 'provision_mode must be null when job_type is "validate_nvr".' }, 400)
+  }
+
+  const branchId = payload.branch_id ?? null
+
+  // Verify company
+  const { data: companyRow, error: companyError } = await supabase
+    .from('companies').select('id').eq('id', companyId).maybeSingle()
+  if (companyError) return jsonResponse({ error: 'Failed to verify company.' }, 500)
+  if (!companyRow)  return jsonResponse({ error: 'Company not found.' }, 404)
+
+  // Verify branch belongs to company
+  if (branchId) {
+    const { data: branchRow, error: branchError } = await supabase
+      .from('branches').select('id').eq('id', branchId).eq('company_id', companyId).maybeSingle()
+    if (branchError) return jsonResponse({ error: 'Failed to verify branch.' }, 500)
+    if (!branchRow)  return jsonResponse({ error: 'Branch not found for this company.' }, 404)
+  }
+
+  // Verify agent is active and belongs to company
+  const agent = await loadAgent(supabase, customerAgentId)
+  if (!agent || agent.company_id !== companyId) {
+    return jsonResponse({ error: 'Customer agent not found for this company.' }, 404)
+  }
+  if (agent.status !== 'active') {
+    return jsonResponse({ error: 'Customer agent is not active.' }, 409)
+  }
+
+  // Verify camera belongs to company
+  const { data: cameraRow, error: cameraError } = await supabase
+    .from('cameras').select('id').eq('id', cameraId).eq('company_id', companyId).maybeSingle()
+  if (cameraError) return jsonResponse({ error: 'Failed to verify camera.' }, 500)
+  if (!cameraRow)  return jsonResponse({ error: 'Camera not found for this company.' }, 404)
+
+  const timeoutAt = new Date(Date.now() + PROVISION_JOB_TIMEOUT_MINUTES * 60_000).toISOString()
+
+  const { data: job, error: insertError } = await supabase
+    .from('camera_provision_jobs')
+    .insert({
+      company_id:        companyId,
+      branch_id:         branchId,
+      customer_agent_id: customerAgentId,
+      camera_id:         cameraId,
+      job_type:          jobType,
+      provision_mode:    jobType === 'validate_nvr' ? null : provisionMode,
+      status:            'pending',
+      timeout_at:        timeoutAt,
+      created_by:        adminUserId,
+    })
+    .select(provisionJobSelect())
+    .single()
+
+  if (insertError) return jsonResponse({ error: 'Failed to create provision job.' }, 500)
+
+  await audit(supabase, req, {
+    agent_id:   customerAgentId,
+    company_id: companyId,
+    event_type: 'provision_job_created',
+    success:    true,
+    details:    { job_id: job.id, camera_id: cameraId, job_type: jobType, provision_mode: provisionMode },
+  })
+
+  return jsonResponse({ status: 'created', job })
+}
+
+// Admin: poll a single provision job by id (for browser status polling in Slice B).
+async function getProvisionJob(
+  supabase: SupabaseClient,
+  payload: AgentApiPayload,
+): Promise<Response> {
+  const jobId = payload.job_id?.trim()
+  if (!jobId) return jsonResponse({ error: 'job_id is required.' }, 400)
+
+  const { data: job, error } = await supabase
+    .from('camera_provision_jobs')
+    .select(provisionJobSelect())
+    .eq('id', jobId)
+    .maybeSingle()
+
+  if (error) return jsonResponse({ error: 'Failed to load provision job.' }, 500)
+  if (!job)  return jsonResponse({ error: 'Provision job not found.' }, 404)
+
+  return jsonResponse({ status: 'ok', job })
+}
+
+// Agent: get pending provision jobs assigned to this agent.
+async function agentGetProvisionJobs(
+  supabase: SupabaseClient,
+  req: Request,
+  tokenPepper: string,
+  payload: AgentApiPayload,
+): Promise<Response> {
+  const auth = await authenticateAgentRequest(supabase, req, tokenPepper)
+  if (!auth.ok) return jsonResponse({ error: auth.error }, auth.status)
+
+  let query = supabase
+    .from('camera_provision_jobs')
+    .select(provisionJobSelect())
+    .eq('company_id', auth.agent.company_id)
+    .eq('customer_agent_id', auth.agent.id)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true })
+    .limit(clampLimit(payload.limit, 1, 5))
+
+  if (auth.agent.branch_id) {
+    query = query.or(`branch_id.is.null,branch_id.eq.${auth.agent.branch_id}`)
+  }
+
+  const { data, error } = await query
+  if (error) return jsonResponse({ error: 'Failed to load provision jobs.' }, 500)
+
+  // Return without sensitive camera data — credentials only sent at claim time.
+  return jsonResponse({ status: 'ok', jobs: data ?? [] })
+}
+
+// Agent: atomically claim a pending provision job and receive camera connection
+// details (including credentials) fetched from the cameras table.
+// Credentials are NEVER stored in camera_provision_jobs.
+async function agentClaimProvisionJob(
+  supabase: SupabaseClient,
+  req: Request,
+  tokenPepper: string,
+  payload: AgentApiPayload,
+): Promise<Response> {
+  const auth = await authenticateAgentRequest(supabase, req, tokenPepper)
+  if (!auth.ok) return jsonResponse({ error: auth.error }, auth.status)
+
+  const jobId = payload.job_id?.trim()
+  if (!jobId) return jsonResponse({ error: 'job_id is required.' }, 400)
+
+  const now = new Date().toISOString()
+
+  // Atomic claim: pending → running
+  let claimQuery = supabase
+    .from('camera_provision_jobs')
+    .update({ status: 'running', started_at: now })
+    .eq('id', jobId)
+    .eq('company_id', auth.agent.company_id)
+    .eq('customer_agent_id', auth.agent.id)
+    .eq('status', 'pending')
+
+  if (auth.agent.branch_id) {
+    claimQuery = claimQuery.or(`branch_id.is.null,branch_id.eq.${auth.agent.branch_id}`)
+  }
+
+  const { data: job, error: claimError } = await claimQuery
+    .select(provisionJobSelect())
+    .maybeSingle()
+
+  if (claimError) return jsonResponse({ error: 'Failed to claim provision job.' }, 500)
+  if (!job)       return jsonResponse({ error: 'Pending provision job not found for this agent.' }, 404)
+
+  const typedJob = job as ProvisionJobRow
+
+  // Fetch camera connection data (service_role — bypasses RLS, never sent to browser).
+  const { data: cameraRow, error: cameraError } = await supabase
+    .from('cameras')
+    .select('id, rtsp_url, onvif_url, username, password_encrypted, nvr_host, stream_port, nvr_channel, parent_camera_id')
+    .eq('id', typedJob.camera_id)
+    .maybeSingle()
+
+  if (cameraError || !cameraRow) {
+    // Roll back: camera deleted between job creation and claim
+    await supabase
+      .from('camera_provision_jobs')
+      .update({ status: 'failed', error_message: 'Camera not found at claim time.', completed_at: now })
+      .eq('id', jobId)
+    return jsonResponse({ error: 'Camera not found.' }, 404)
+  }
+
+  const camera = cameraRow as {
+    id: string; rtsp_url: string | null; onvif_url: string | null
+    username: string | null; password_encrypted: string | null
+    nvr_host: string | null; stream_port: number | null
+    nvr_channel: string | null; parent_camera_id: string | null
+  }
+
+  // For nvr_channel: fetch parent NVR credentials too.
+  let parentCamera: {
+    nvr_host: string | null; stream_port: number | null
+    username: string | null; password: string | null
+  } | null = null
+
+  if (typedJob.provision_mode === 'nvr_channel' && camera.parent_camera_id) {
+    const { data: parentRow, error: parentError } = await supabase
+      .from('cameras')
+      .select('nvr_host, stream_port, username, password_encrypted')
+      .eq('id', camera.parent_camera_id)
+      .maybeSingle()
+
+    if (!parentError && parentRow) {
+      const p = parentRow as { nvr_host: string | null; stream_port: number | null; username: string | null; password_encrypted: string | null }
+      parentCamera = {
+        nvr_host:    p.nvr_host,
+        stream_port: p.stream_port,
+        username:    p.username,
+        password:    p.password_encrypted,
+      }
+    }
+  }
+
+  await audit(supabase, req, {
+    agent_id:   auth.agent.id,
+    company_id: auth.agent.company_id,
+    event_type: 'provision_job_claimed',
+    success:    true,
+    details:    { job_id: jobId, job_type: typedJob.job_type, provision_mode: typedJob.provision_mode },
+  })
+
+  return jsonResponse({
+    status: 'claimed',
+    job: {
+      ...typedJob,
+      camera: {
+        rtsp_url:    camera.rtsp_url,
+        onvif_url:   camera.onvif_url,
+        username:    camera.username,
+        password:    camera.password_encrypted,
+        nvr_host:    camera.nvr_host,
+        stream_port: camera.stream_port,
+        nvr_channel: camera.nvr_channel,
+      },
+      parent_camera: parentCamera,
+    },
+  })
+}
+
+// Agent: submit the provision result and (on success) update cameras.live_stream_url.
+async function agentSubmitProvisionResult(
+  supabase: SupabaseClient,
+  req: Request,
+  tokenPepper: string,
+  payload: AgentApiPayload,
+): Promise<Response> {
+  const auth = await authenticateAgentRequest(supabase, req, tokenPepper)
+  if (!auth.ok) return jsonResponse({ error: auth.error }, auth.status)
+
+  const jobId     = payload.job_id?.trim()
+  const nextStatus = payload.status?.trim()
+  const result    = payload.result ?? null
+
+  if (!jobId) return jsonResponse({ error: 'job_id is required.' }, 400)
+  if (!nextStatus || !['completed', 'failed', 'timeout'].includes(nextStatus)) {
+    return jsonResponse({ error: 'status must be "completed", "failed", or "timeout".' }, 400)
+  }
+
+  const now = new Date().toISOString()
+
+  const { data: job, error: updateError } = await supabase
+    .from('camera_provision_jobs')
+    .update({
+      status:        nextStatus,
+      result:        result ?? null,
+      error_message: payload.error_message?.trim() || null,
+      completed_at:  now,
+    })
+    .eq('id', jobId)
+    .eq('company_id', auth.agent.company_id)
+    .eq('customer_agent_id', auth.agent.id)
+    .eq('status', 'running')
+    .select(provisionJobSelect())
+    .maybeSingle()
+
+  if (updateError) return jsonResponse({ error: 'Failed to update provision job.' }, 500)
+  if (!job)        return jsonResponse({ error: 'Running provision job not found for this agent.' }, 404)
+
+  const typedJob = job as ProvisionJobRow
+
+  // On success: update cameras.live_stream_url and stream_type so the camera
+  // record reflects the provisioned stream immediately (no browser round-trip needed).
+  if (nextStatus === 'completed' && result?.ok === true && typedJob.job_type === 'provision') {
+    const liveStreamUrl = typeof result.liveStreamUrl === 'string' ? result.liveStreamUrl : null
+    const streamType    = typeof result.streamType    === 'string' ? result.streamType    : null
+
+    if (liveStreamUrl) {
+      await supabase
+        .from('cameras')
+        .update({
+          live_stream_url: liveStreamUrl,
+          ...(streamType ? { stream_type: streamType } : {}),
+          updated_at: now,
+        })
+        .eq('id', typedJob.camera_id)
+    }
+  }
+
+  await audit(supabase, req, {
+    agent_id:   auth.agent.id,
+    company_id: auth.agent.company_id,
+    event_type: nextStatus === 'completed' ? 'provision_job_completed' : 'provision_job_failed',
+    success:    nextStatus === 'completed',
+    details: {
+      job_id:         jobId,
+      job_type:       typedJob.job_type,
+      provision_mode: typedJob.provision_mode,
+      result_ok:      result?.ok ?? false,
+    },
+  })
+
+  return jsonResponse({ status: nextStatus, job: typedJob })
+}
+
 async function heartbeat(
   supabase: SupabaseClient,
   req: Request,
@@ -834,6 +1193,19 @@ Deno.serve(async (req: Request) => {
     return agentCompleteJob(supabase, req, tokenPepper, payload)
   }
 
+  // ── Phase 3E: Provision Jobs (agent-side, no admin auth) ─────────────────
+  if (action === 'agent_get_provision_jobs') {
+    return agentGetProvisionJobs(supabase, req, tokenPepper, payload)
+  }
+
+  if (action === 'agent_claim_provision_job') {
+    return agentClaimProvisionJob(supabase, req, tokenPepper, payload)
+  }
+
+  if (action === 'agent_submit_provision_result') {
+    return agentSubmitProvisionResult(supabase, req, tokenPepper, payload)
+  }
+
   const admin = await requirePlatformAdmin(req, supabaseUrl, anonKey)
   if (!admin.ok) return jsonResponse({ error: admin.error }, admin.status)
 
@@ -843,6 +1215,15 @@ Deno.serve(async (req: Request) => {
 
   if (action === 'create_discovery_job') {
     return createDiscoveryJob(supabase, req, payload, admin.userId)
+  }
+
+  // ── Phase 3E: Provision Jobs (admin-side) ─────────────────────────────────
+  if (action === 'create_provision_job') {
+    return createProvisionJob(supabase, req, payload, admin.userId)
+  }
+
+  if (action === 'get_provision_job') {
+    return getProvisionJob(supabase, payload)
   }
 
   if (action === 'list_agents') {
@@ -876,8 +1257,11 @@ Deno.serve(async (req: Request) => {
   return jsonResponse({
     error: 'Unsupported action.',
     supported_actions: [
+      // Platform Admin
       'create_pairing_code',
       'create_discovery_job',
+      'create_provision_job',
+      'get_provision_job',
       'list_agents',
       'update_agent',
       'disable_agent',
@@ -885,11 +1269,15 @@ Deno.serve(async (req: Request) => {
       'revoke_agent',
       'revoke_pairing_code',
       'revoke_agent_token',
+      // Agent (token auth)
       'heartbeat',
       'agent_get_jobs',
       'agent_claim_job',
       'agent_submit_discovery_results',
       'agent_complete_job',
+      'agent_get_provision_jobs',
+      'agent_claim_provision_job',
+      'agent_submit_provision_result',
     ],
   }, 400)
 })
