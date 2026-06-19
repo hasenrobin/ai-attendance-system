@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useI18n } from '../../hooks/useI18n'
-import type { LocalAgent, CameraDiscoveryJob, CameraDiscoveryResult } from '../../types/camera'
+import type { CameraDiscoveryJob, CameraDiscoveryResult } from '../../types/camera'
+import type { CustomerAgentAdminRow } from '../agents/agentAdminService'
 import {
-  getLocalAgents,
+  getDiscoveryAgents,
   getLatestJob,
   getDiscoveryResults,
   createDiscoveryJob,
@@ -29,7 +30,7 @@ type CameraDiscoveryPanelProps = {
 
 const POLL_INTERVAL_MS = 3000
 
-function AgentStatusBadge({ agent, t }: { agent: LocalAgent | null; t: (k: string) => string }) {
+function AgentStatusBadge({ agent, t }: { agent: CustomerAgentAdminRow | null; t: (k: string) => string }) {
   if (!agent) {
     return (
       <span className="cd-agent-badge cd-agent-badge--offline">
@@ -119,7 +120,7 @@ function ResultsTable({
 export function CameraDiscoveryPanel({ companyId, userId, onAddCamera }: CameraDiscoveryPanelProps) {
   const { t } = useI18n()
 
-  const [agents, setAgents]       = useState<LocalAgent[]>([])
+  const [agents, setAgents]       = useState<CustomerAgentAdminRow[]>([])
   const [job, setJob]             = useState<CameraDiscoveryJob | null>(null)
   const [results, setResults]     = useState<CameraDiscoveryResult[]>([])
   const [scanRange, setScanRange] = useState('')
@@ -133,12 +134,12 @@ export function CameraDiscoveryPanel({ companyId, userId, onAddCamera }: CameraD
   // Load agents on mount
   useEffect(() => {
     let cancelled = false
-    getLocalAgents(companyId).then(({ data }) => {
+    getDiscoveryAgents(companyId).then(({ data }) => {
       if (!cancelled) setAgents(data)
     })
     // Refresh agents every 60s to pick up heartbeat changes
     const t2 = setInterval(() => {
-      getLocalAgents(companyId).then(({ data }) => {
+      getDiscoveryAgents(companyId).then(({ data }) => {
         if (!cancelled) setAgents(data)
       })
     }, 60_000)
@@ -198,7 +199,7 @@ export function CameraDiscoveryPanel({ companyId, userId, onAddCamera }: CameraD
     setResults([])
     const { data: newJob, error: err } = await createDiscoveryJob({
       companyId,
-      agentId: primaryAgent?.id ?? null,
+      customerAgentId: primaryAgent?.id ?? '',
       createdBy: userId,
       scanRange: scanRange.trim() || null,
     })
@@ -303,3 +304,4 @@ export function CameraDiscoveryPanel({ companyId, userId, onAddCamera }: CameraD
     </div>
   )
 }
+

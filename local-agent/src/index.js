@@ -13,6 +13,7 @@ import { startProvisioningApi } from './provisioning/server.js'
 import { loadIdentity, identityPath } from './identity/identityStore.js'
 import { pairAgent } from './pairing/pairingClient.js'
 import { startHeartbeatService } from './service/heartbeatService.js'
+import { startJobPoller } from './jobPoller.js'
 import {
   AGENT_NAME,
   AGENT_PAIRING_CODE,
@@ -47,6 +48,7 @@ if (!identity) {
 } else {
   console.log(`[identity] Loaded agentId=${identity.agentId} companyId=${identity.companyId} machine="${identity.machineName}"`)
   await startHeartbeatService(identity)
+  startJobPoller(identity)
 
   const mediaMtx = describeMediaMtxPaths()
   console.log(`[mediamtx] executable=${mediaMtx.executable}`)
@@ -55,6 +57,6 @@ if (!identity) {
 
   startProvisioningApi()
 
-  console.log('[agent] Ready. Agent API heartbeat + local provisioning are active.')
-  console.log('[agent] Legacy direct-Supabase discovery/stream polling is disabled in Phase 3C.')
+  console.log('[agent] Ready. Agent API heartbeat, discovery polling, and local provisioning are active.')
+  console.log('[agent] Legacy direct-Supabase modules remain present but are not used by startup.')
 }

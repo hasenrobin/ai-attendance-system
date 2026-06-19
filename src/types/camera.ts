@@ -156,6 +156,7 @@ export type CameraDiscoveryJob = {
   company_id: string
   branch_id: string | null
   agent_id: string | null
+  customer_agent_id: string | null
   status: DiscoveryJobStatus
   created_by: string | null
   scan_range: string | null
