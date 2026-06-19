@@ -1,34 +1,60 @@
 // ============================================================================
-// AI Attendance — Local Customer Agent
+// AI Attendance - Local Customer Agent
 //
-// Entry point. Starts the heartbeat (registers the agent in Supabase and
-// keeps it marked online), then starts the job poller which watches for
-// camera discovery jobs and processes them.
-//
-// Run: node src/index.js
-// Or with PM2: pm2 start src/index.js --name ai-attendance-local-agent
+// Customer Agent:
+// - Agent identity + token authentication
+// - Agent API heartbeat
+// - Local MediaMTX process management
+// - Local provisioning API compatible with src/features/cameras/provisioningService.ts
 // ============================================================================
 
-import { startHeartbeat } from './heartbeat.js'
-import { startJobPoller } from './jobPoller.js'
-import { startStreamManager } from './streamManager.js'
-import { AGENT_COMPANY_ID, AGENT_NAME, MEDIAMTX_RTSP_PUBLISH_URL, FFMPEG_PATH } from './config.js'
+import { startMediaMtx, describeMediaMtxPaths } from './mediaMtxProcess.js'
+import { startProvisioningApi } from './provisioning/server.js'
+import { loadIdentity, identityPath } from './identity/identityStore.js'
+import { pairAgent } from './pairing/pairingClient.js'
+import { startHeartbeatService } from './service/heartbeatService.js'
+import {
+  AGENT_NAME,
+  AGENT_PAIRING_CODE,
+  LOCAL_FFMPEG_PATH,
+  MEDIAMTX_HLS_PUBLIC_URL_LOCAL,
+  PROVISIONING_API_HOST,
+  PROVISIONING_API_PORT,
+} from './config.js'
 
-console.log('═══════════════════════════════════════════════════')
-console.log(' AI Attendance — Local Customer Agent v1.0.0')
-console.log(`  Company:          ${AGENT_COMPANY_ID}`)
+console.log('============================================================')
+console.log(' AI Attendance - Local Customer Agent v1.0.0')
 console.log(`  Name:             ${AGENT_NAME}`)
-console.log(`  Cloud MediaMTX:   ${MEDIAMTX_RTSP_PUBLISH_URL}`)
-console.log(`  ffmpeg path:      ${FFMPEG_PATH}`)
-console.log('═══════════════════════════════════════════════════')
+console.log(`  Identity file:    ${identityPath()}`)
+console.log(`  Provisioning API: http://${PROVISIONING_API_HOST}:${PROVISIONING_API_PORT}`)
+console.log(`  Local HLS URL:    ${MEDIAMTX_HLS_PUBLIC_URL_LOCAL}`)
+console.log(`  ffmpeg path:      ${LOCAL_FFMPEG_PATH}`)
+console.log('============================================================')
 
-// Register with Supabase and start heartbeat
-await startHeartbeat()
+let identity = loadIdentity()
 
-// Start polling for camera discovery jobs
-startJobPoller()
+if (!identity && AGENT_PAIRING_CODE) {
+  console.log('[pairing] No local identity found. Pairing with provided AGENT_PAIRING_CODE...')
+  identity = await pairAgent(AGENT_PAIRING_CODE)
+  console.log(`[pairing] Paired successfully. agentId=${identity.agentId} companyId=${identity.companyId}`)
+}
 
-// Start Option A stream manager: pull LAN RTSP → push to cloud MediaMTX
-startStreamManager()
+if (!identity) {
+  console.warn('[agent] Pairing required. No valid identity file was found.')
+  console.warn('[agent] Generate a pairing code from /admin/agents, then set AGENT_PAIRING_CODE and restart this agent.')
+  console.warn('[agent] No Supabase service-role key is required or used by Phase 3C.')
+  setInterval(() => {}, 60_000)
+} else {
+  console.log(`[identity] Loaded agentId=${identity.agentId} companyId=${identity.companyId} machine="${identity.machineName}"`)
+  await startHeartbeatService(identity)
 
-console.log('[agent] Ready. Discovering cameras + managing streams...')
+  const mediaMtx = describeMediaMtxPaths()
+  console.log(`[mediamtx] executable=${mediaMtx.executable}`)
+  console.log(`[mediamtx] config=${mediaMtx.config}`)
+  await startMediaMtx()
+
+  startProvisioningApi()
+
+  console.log('[agent] Ready. Agent API heartbeat + local provisioning are active.')
+  console.log('[agent] Legacy direct-Supabase discovery/stream polling is disabled in Phase 3C.')
+}

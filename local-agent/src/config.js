@@ -47,9 +47,13 @@ function optional(key, defaultValue) {
 }
 
 export const SUPABASE_URL           = required('SUPABASE_URL')
-export const SUPABASE_SERVICE_ROLE  = required('SUPABASE_SERVICE_ROLE_KEY')
-export const AGENT_COMPANY_ID       = required('AGENT_COMPANY_ID')
 export const AGENT_NAME             = optional('AGENT_NAME', 'Local Agent')
+export const AGENT_PAIRING_CODE     = optional('AGENT_PAIRING_CODE', '')
+export const AGENT_API_BASE_URL     = optional('AGENT_API_BASE_URL', `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1`)
+
+// Legacy company/branch values are no longer required by the Phase 3C startup
+// path. They remain optional only so disabled legacy modules can still parse.
+export const AGENT_COMPANY_ID       = optional('AGENT_COMPANY_ID', '')
 export const AGENT_BRANCH_ID        = optional('AGENT_BRANCH_ID', '') || null
 
 export const POLL_INTERVAL_MS       = Number(optional('AGENT_POLL_INTERVAL_MS',   '5000'))

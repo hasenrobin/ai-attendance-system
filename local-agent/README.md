@@ -1,113 +1,147 @@
-# AI Attendance — Local Customer Agent
+# AI Attendance - Local Customer Agent
 
-This service runs **inside the customer's LAN** and enables automatic camera discovery. It cannot be replaced by the Hetzner cloud server because cloud servers cannot reach private IP addresses (`192.168.x.x`, `10.x.x.x`, etc.).
+Customer Agent MVP for testing real cameras inside a customer's LAN.
 
-## What it does
+This is not a Windows installer yet. It is a manually started Node.js process
+that runs on a machine connected to the same network as the cameras.
 
-1. **Registers itself** in Supabase (`local_agents` table) on startup
-2. **Sends heartbeats** every 30 seconds so the cloud app can show online/offline status
-3. **Polls for discovery jobs** created by users in the Cameras page
-4. **Scans the local LAN** when a job arrives:
-   - ONVIF WS-Discovery (UDP multicast broadcast)
-   - TCP port scan: 80, 81, 8080, 554, 8000, 8899, 37777
-   - Camera fingerprinting (manufacturer/model detection via HTTP)
-5. **Writes results** to Supabase (`camera_discovery_results`)
-6. Users can then click **Add Camera** in the app to add any discovered device
+## What It Does
 
-## Installation
+1. Pairs once with AttendanceAI using a Platform Admin pairing code.
+2. Stores agent identity locally in `identity.json`.
+3. Sends heartbeats through the Agent API using the agent token.
+4. Starts or connects to local MediaMTX.
+5. Exposes a local provisioning API compatible with `provisioningService.ts`:
+   - `GET /health`
+   - `POST /provision`
+   - `POST /validate/nvr-parent`
+6. Converts RTSP/ONVIF/NVR streams to local HLS through MediaMTX/ffmpeg.
 
-### Prerequisites
+Phase 3C intentionally disables the legacy direct-Supabase discovery poller and
+cloud stream manager until those flows move behind Agent API endpoints. The
+customer machine no longer needs a Supabase service-role key or company UUID.
 
-- Node.js 18 or later
-- Network access to the Supabase project (outbound HTTPS)
-- Access to the customer LAN (run on a machine on the same network as the cameras)
+## Important MVP Limitation
 
-### Setup
+By default, provisioned HLS URLs are local:
+
+```text
+http://localhost:8888/<path>/index.m3u8
+```
+
+That means Live View works only from the same machine running the Local Agent.
+If you open `/admin/cameras` from another computer, `localhost` points to that
+other computer, not the agent machine.
+
+For a LAN test from another browser machine, set:
+
+```env
+MEDIAMTX_HLS_PUBLIC_URL=http://<agent-lan-ip>:8888
+PROVISIONING_API_HOST=0.0.0.0
+VITE_PROVISIONING_AGENT_URL=http://<agent-lan-ip>:8787
+CAMERA_PROXY_ALLOWED_ORIGINS=http://<frontend-host>:5173
+```
+
+Only do this on a trusted local network for manual testing.
+
+## Prerequisites
+
+- Node.js 18 or later.
+- Supabase project access.
+- `camera-proxy/mediamtx.exe`, `ffmpeg.exe`, `ffprobe.exe`, and `mediamtx.yml`
+  present in this repository. The default config points to `../camera-proxy`.
+- A real RTSP camera reachable from the agent machine.
+
+## Setup
 
 ```bash
-# 1. Install dependencies
 cd local-agent
 npm install
-
-# 2. Configure environment
 cp .env.agent.example .env.agent
-# Edit .env.agent with your Supabase URL, service-role key, and company ID
+```
 
-# 3. Run
+Edit `.env.agent`:
+
+```env
+SUPABASE_URL=https://your-project.supabase.co
+AGENT_PAIRING_CODE=PASTE-ONE-TIME-CODE-HERE
+AGENT_NAME=Main Office Agent
+```
+
+Generate the pairing code from Platform Admin > Agents. The code is one-time
+and expires. After the first successful run, the agent stores `identity.json`;
+remove `AGENT_PAIRING_CODE` from `.env.agent`.
+
+## Run
+
+```bash
 npm start
 ```
 
-### Running as a persistent service (recommended)
+On startup the agent:
 
-**With PM2 (Linux/Mac):**
+- loads or creates local identity,
+- sends heartbeat through `agent-api`,
+- starts MediaMTX if it is not already running,
+- starts the provisioning API at `http://127.0.0.1:8787`.
+
+Check the API:
+
 ```bash
-npm install -g pm2
-pm2 start src/index.js --name ai-attendance-local-agent
-pm2 save
-pm2 startup   # follow the printed instructions
+curl http://127.0.0.1:8787/health
 ```
 
-**With PM2 (Windows):**
-```powershell
-npm install -g pm2
-pm2 start src/index.js --name ai-attendance-local-agent
-pm2 save
-```
+## Test One RTSP Camera
+
+1. Start the frontend normally.
+2. Start this Local Agent with `npm start`.
+3. Open `/admin/cameras` on the same machine as the agent.
+4. Select the target company.
+5. Add a camera manually:
+   - connection mode: `direct_rtsp`
+   - RTSP URL: the camera's RTSP URL
+   - username/password if needed
+6. Save.
+7. The page calls `POST http://127.0.0.1:8787/provision`.
+8. The agent runs `ffprobe`, configures MediaMTX, verifies HLS, and the app
+   saves `stream_type = hls` plus `live_stream_url`.
+9. Click Live View.
+
+## Discovery Test
+
+Legacy discovery jobs are disabled in Phase 3C because they still used direct
+Supabase writes. Discovery will return in a later phase through Agent API jobs
+and upload endpoints.
 
 ## Configuration
 
-All configuration is in `.env.agent` (never commit this file):
+All configuration is in `.env.agent`.
 
 | Variable | Required | Description |
-|----------|----------|-------------|
-| `SUPABASE_URL` | ✅ | Your Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Service-role key (bypasses RLS) — keep secret |
-| `AGENT_COMPANY_ID` | ✅ | The company UUID this agent belongs to |
-| `AGENT_NAME` | | Human-readable agent name (shown in the app) |
-| `AGENT_BRANCH_ID` | | Restrict to a specific branch (optional) |
-| `AGENT_POLL_INTERVAL_MS` | | How often to check for new jobs (default: 5000) |
-| `AGENT_HEARTBEAT_INTERVAL_MS` | | Heartbeat frequency (default: 30000) |
-| `AGENT_SCAN_TIMEOUT_MS` | | Max scan duration (default: 300000 = 5 min) |
-| `AGENT_SCAN_CONCURRENCY` | | Concurrent IPs during port scan (default: 30) |
+| --- | --- | --- |
+| `SUPABASE_URL` | yes | Supabase project URL. |
+| `AGENT_API_BASE_URL` | no | Defaults to `<SUPABASE_URL>/functions/v1`. |
+| `AGENT_PAIRING_CODE` | first run only | One-time pairing code from Platform Admin > Agents. |
+| `AGENT_NAME` | no | Human-readable agent name. |
+| `PROVISIONING_API_HOST` | no | Default `127.0.0.1`. Use `0.0.0.0` only for trusted LAN tests. |
+| `PROVISIONING_API_PORT` | no | Default `8787`. |
+| `MEDIAMTX_DIR` | no | Default `../camera-proxy`. |
+| `MEDIAMTX_YML_PATH` | no | Default `<MEDIAMTX_DIR>/mediamtx.yml`. |
+| `MEDIAMTX_EXECUTABLE` | no | Default `<MEDIAMTX_DIR>/mediamtx.exe` on Windows, `mediamtx` elsewhere. |
+| `MEDIAMTX_HLS_PUBLIC_URL` | no | Default `http://localhost:8888`. |
+| `FFMPEG_PATH` | no | Default `<MEDIAMTX_DIR>/ffmpeg.exe` on Windows, `ffmpeg` elsewhere. |
+| `FFPROBE_PATH` | no | Default `<MEDIAMTX_DIR>/ffprobe.exe` on Windows, `ffprobe` elsewhere. |
+| `MEDIAMTX_AUTO_START` | no | Default `true`. |
+| `CAMERA_PROXY_ALLOWED_ORIGINS` | no | Extra comma-separated frontend origins for CORS. |
+| `ENABLE_CLOUD_STREAM_MANAGER` | no | Legacy direct-Supabase path; not started by Phase 3C. |
 
-## Security
+## Not Included In This MVP
 
-- The agent **only scans private RFC 1918 IP ranges** (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
-- The service-role key is stored locally in `.env.agent` and never sent to the browser
-- Discovery results never contain camera passwords
-- One job runs at a time (no concurrent scans)
-- Jobs have a configurable timeout (default 5 minutes)
-
-## What the agent finds
-
-For each discovered device:
-- IP address, open ports
-- Manufacturer (Hikvision, Dahua, Uniview, TP-Link, etc.)
-- ONVIF support
-- RTSP port (554)
-- HTTP management interface
-- Suggested RTSP/ONVIF URLs (no credentials)
-
-## Architecture
-
-```
-Customer LAN
-│
-├── Cameras (192.168.x.x)
-│       ↑ port scan + ONVIF multicast
-└── This Agent (Node.js)
-        │ HTTPS (outbound only)
-        ↓
-    Supabase (cloud)
-        │
-        └── React Frontend (Cameras page)
-```
-
-## Future: Windows installer
-
-This agent is currently a Node.js service that can be started manually or via PM2.
-A future version will be packaged as a Windows installer (.exe) with:
-- Auto-start on Windows boot (Windows Service)
-- System tray icon
-- Auto-update mechanism
-- GUI configuration wizard
+- No Windows installer.
+- No Windows Service.
+- No system tray.
+- No auto-update.
+- No Recognition Worker changes.
+- No Attendance Pipeline changes.
+- No database migrations.
+- No production deployment.
