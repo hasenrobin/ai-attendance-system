@@ -1,0 +1,91 @@
+// ============================================================================
+// Local Customer Agent — Configuration
+//
+// Reads all configuration from environment variables (set via .env.agent or
+// the host process environment). Never hardcodes secrets.
+// ============================================================================
+
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const AGENT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const ENV_PATH = path.join(AGENT_ROOT, '.env.agent')
+
+// Minimal KEY=VALUE parser — loads .env.agent into process.env if present.
+// Variables already set in the environment are never overwritten.
+try {
+  const content = readFileSync(ENV_PATH, 'utf-8')
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const eq = trimmed.indexOf('=')
+    if (eq === -1) continue
+    const key = trimmed.slice(0, eq).trim()
+    let value = trimmed.slice(eq + 1).trim()
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1)
+    }
+    if (process.env[key] === undefined) process.env[key] = value
+  }
+} catch (err) {
+  if (err.code !== 'ENOENT') throw err
+  console.warn('[agent] No .env.agent found — relying on process environment only.')
+}
+
+function required(key) {
+  const v = process.env[key]
+  if (!v) throw new Error(`[agent] Missing required environment variable: ${key}`)
+  return v
+}
+
+function optional(key, defaultValue) {
+  return process.env[key] ?? defaultValue
+}
+
+export const SUPABASE_URL           = required('SUPABASE_URL')
+export const SUPABASE_SERVICE_ROLE  = required('SUPABASE_SERVICE_ROLE_KEY')
+export const AGENT_COMPANY_ID       = required('AGENT_COMPANY_ID')
+export const AGENT_NAME             = optional('AGENT_NAME', 'Local Agent')
+export const AGENT_BRANCH_ID        = optional('AGENT_BRANCH_ID', '') || null
+
+export const POLL_INTERVAL_MS       = Number(optional('AGENT_POLL_INTERVAL_MS',   '5000'))
+export const HEARTBEAT_INTERVAL_MS  = Number(optional('AGENT_HEARTBEAT_INTERVAL_MS', '30000'))
+export const SCAN_TIMEOUT_MS        = Number(optional('AGENT_SCAN_TIMEOUT_MS',    '300000'))
+export const SCAN_CONCURRENCY       = Number(optional('AGENT_SCAN_CONCURRENCY',   '30'))
+
+// ── Option A: Stream to Cloud MediaMTX ───────────────────────────────────────
+// The cloud MediaMTX RTSP endpoint this agent publishes streams TO.
+// Must be publicly reachable (port 8554 open on the cloud server).
+export const MEDIAMTX_RTSP_PUBLISH_URL = optional('MEDIAMTX_RTSP_PUBLISH_URL', 'rtsp://91.98.80.25:8554')
+
+// The public base URL where the cloud MediaMTX serves HLS.
+// Stored in cameras.live_stream_url so the browser can play the stream.
+export const MEDIAMTX_HLS_PUBLIC_URL = optional('MEDIAMTX_HLS_PUBLIC_URL', 'http://91.98.80.25/camera-hls')
+
+// Path to the ffmpeg binary on the agent machine.
+// On Linux: 'ffmpeg' (system install).  On Windows: full path to ffmpeg.exe.
+export const FFMPEG_PATH = optional('FFMPEG_PATH', process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg')
+
+// Ports scanned on every discovered IP
+export const CAMERA_PORTS = [80, 81, 8080, 554, 8000, 8899, 37777]
+
+// Private IP ranges (RFC 1918) — agent ONLY scans these ranges
+export const PRIVATE_RANGES = [
+  { start: ip2int('10.0.0.0'),     end: ip2int('10.255.255.255')   },
+  { start: ip2int('172.16.0.0'),   end: ip2int('172.31.255.255')   },
+  { start: ip2int('192.168.0.0'),  end: ip2int('192.168.255.255')  },
+  { start: ip2int('169.254.0.0'),  end: ip2int('169.254.255.255')  },
+]
+
+export function ip2int(ip) {
+  return ip.split('.').reduce((acc, oct) => (acc << 8) | Number(oct), 0) >>> 0
+}
+
+export function isPrivateIp(ip) {
+  const n = ip2int(ip)
+  return PRIVATE_RANGES.some(r => n >= r.start && n <= r.end)
+}

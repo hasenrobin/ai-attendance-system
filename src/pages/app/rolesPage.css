@@ -1,0 +1,696 @@
+/* ── Summary cards ──────────────────────────────────────────── */
+
+.rl-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-5);
+  margin-bottom: var(--space-5);
+}
+
+/* ── Info / loading rows ────────────────────────────────────── */
+
+.rl-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-10) var(--space-6);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.rl-info-row--error {
+  color: rgba(239, 68, 68, 0.8);
+}
+
+/* ── Table ──────────────────────────────────────────────────── */
+
+.rl-table-wrap {
+  overflow-x: auto;
+  min-height: 120px;
+}
+
+.rl-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.rl-th {
+  padding: var(--space-3) var(--space-5);
+  text-align: left;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.rl-th--right,
+.rl-td--right {
+  text-align: right;
+}
+
+.rl-td {
+  padding: var(--space-4) var(--space-5);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  vertical-align: top;
+}
+
+.rl-td--primary {
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.rl-td--muted {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.rl-tr:last-child .rl-td {
+  border-bottom: none;
+}
+
+.rl-tr:hover .rl-td {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* ── Badges ─────────────────────────────────────────────────── */
+
+.rl-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.rl-badge--gold {
+  color: var(--color-gold-light);
+  background-color: var(--color-gold-dim);
+  border: 1px solid rgba(201, 168, 76, 0.22);
+}
+
+.rl-badge--neutral {
+  color: var(--color-text-muted);
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-border);
+}
+
+.rl-badge--success {
+  color: var(--color-success-light);
+  background-color: var(--color-success-dim);
+  border: 1px solid rgba(34, 197, 94, 0.22);
+}
+
+/* ── Row actions ────────────────────────────────────────────── */
+
+.rl-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ── Assigned role pills ────────────────────────────────────── */
+
+.rl-role-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.rl-role-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px var(--space-2) 2px var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-electric-light);
+  background-color: var(--color-electric-dim);
+  border: 1px solid rgba(45, 126, 247, 0.22);
+  white-space: nowrap;
+}
+
+.rl-role-pill-branch {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+.rl-role-pill-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.rl-role-pill-remove:hover {
+  background: rgba(239, 68, 68, 0.25);
+  color: var(--color-danger-light);
+}
+
+.rl-role-pill-remove:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ── Forms ──────────────────────────────────────────────────── */
+
+.rl-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.rl-form-error {
+  padding: var(--space-3) var(--space-4);
+  background-color: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: rgba(239, 68, 68, 0.9);
+}
+
+.rl-form-note {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+
+.rl-form-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  display: block;
+  margin-bottom: var(--space-2);
+}
+
+.rl-textarea {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-size: 0.9375rem;
+  font-family: inherit;
+  outline: none;
+  resize: vertical;
+  min-height: 80px;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.rl-textarea:focus {
+  border-color: rgba(201, 168, 76, 0.5);
+  box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.1);
+}
+
+/* ── Select ─────────────────────────────────────────────────── */
+
+.rl-select-wrap {
+  position: relative;
+}
+
+.rl-select-wrap::after {
+  content: '';
+  position: absolute;
+  right: var(--space-4);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--color-text-muted);
+  pointer-events: none;
+}
+
+.rl-select {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  padding-right: calc(var(--space-4) + 22px);
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-size: 0.9375rem;
+  font-family: inherit;
+  outline: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.rl-select:focus {
+  border-color: rgba(201, 168, 76, 0.5);
+  box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.1);
+}
+
+.rl-select option {
+  background-color: #0d0f1a;
+  color: var(--color-text-primary);
+}
+
+/* ── Permission items (used in wizard Step 2) ───────────────── */
+
+.rl-permission-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.rl-permission-item:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.rl-permission-checkbox {
+  margin-top: 3px;
+  accent-color: var(--color-gold);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.rl-permission-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rl-permission-name {
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+}
+
+/* ── Permission Studio module cards (used in wizard Step 2) ── */
+
+.rl-studio-module {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.rl-studio-module-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background-color: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  user-select: none;
+}
+
+.rl-studio-module-header:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.rl-studio-module-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.rl-studio-module-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.rl-studio-module-desc {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+  line-height: 1.5;
+}
+
+.rl-studio-module-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.rl-studio-module-toggle-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-gold-light);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.rl-studio-module-toggle-btn:hover {
+  text-decoration: underline;
+}
+
+.rl-studio-module-chevron {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  transition: transform var(--transition-fast);
+  line-height: 1;
+}
+
+.rl-studio-module-chevron--open {
+  transform: rotate(180deg);
+}
+
+.rl-studio-module-body {
+  padding: var(--space-2) var(--space-4) var(--space-3);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.rl-studio-perm-desc {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+/* ── Module badges on role table ────────────────────────────── */
+
+.rl-module-badge-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.rl-module-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+/* ── Permission Wizard (UX-3D) ──────────────────────────────── */
+
+/* Step progress bar */
+.rl-wizard-progress {
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.rl-wizard-progress-step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.rl-wizard-progress-num {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  background-color: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.rl-wizard-progress-step--active .rl-wizard-progress-num {
+  background-color: var(--color-gold);
+  color: #1a1500;
+  border-color: var(--color-gold);
+}
+
+.rl-wizard-progress-step--done .rl-wizard-progress-num {
+  background-color: var(--color-gold-dim);
+  color: var(--color-gold-light);
+  border-color: rgba(201, 168, 76, 0.4);
+}
+
+.rl-wizard-progress-label {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.rl-wizard-progress-step--active .rl-wizard-progress-label {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.rl-wizard-progress-step--done .rl-wizard-progress-label {
+  color: var(--color-gold-light);
+}
+
+.rl-wizard-progress-sep {
+  flex: 1;
+  height: 1px;
+  background-color: var(--color-border);
+  margin: 0 var(--space-3);
+  min-width: 16px;
+}
+
+/* Scrollable content so footer buttons stay visible */
+.rl-wizard-content {
+  max-height: calc(90vh - 300px);
+  min-height: 200px;
+  overflow-y: auto;
+}
+
+/* Step 1 — page card grid */
+.rl-wizard-pages {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+}
+
+.rl-wizard-page-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.rl-wizard-page-card:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.rl-wizard-page-card--on {
+  border-color: rgba(201, 168, 76, 0.4);
+  background-color: rgba(201, 168, 76, 0.04);
+}
+
+.rl-wizard-page-card--locked {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.rl-wizard-page-card--locked:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.rl-wizard-page-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.rl-wizard-page-card-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 3px;
+}
+
+.rl-wizard-page-card-desc {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+/* Toggle switch */
+.rl-wizard-toggle {
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  padding: 0;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.rl-wizard-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+  transition: transform var(--transition-fast), background var(--transition-fast);
+}
+
+.rl-wizard-toggle--on {
+  background: rgba(201, 168, 76, 0.25);
+  border-color: rgba(201, 168, 76, 0.5);
+}
+
+.rl-wizard-toggle--on::after {
+  transform: translateX(18px);
+  background: var(--color-gold);
+}
+
+.rl-wizard-locked-label {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  font-style: italic;
+  flex-shrink: 0;
+}
+
+/* Step 2 — actions */
+.rl-wizard-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Step 3 — review */
+.rl-wizard-review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.rl-review-section {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+}
+
+.rl-review-section-title {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-4);
+}
+
+.rl-review-empty {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.rl-review-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.rl-review-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+}
+
+.rl-review-check {
+  color: var(--color-gold-light);
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+  width: 16px;
+}
+
+.rl-review-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.rl-review-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.rl-review-group-title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-gold-light);
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+
+@media (max-width: 1080px) {
+  .rl-stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .rl-stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rl-wizard-pages {
+    grid-template-columns: 1fr;
+  }
+
+  .rl-wizard-content {
+    max-height: none;
+  }
+
+  .rl-wizard-progress-label {
+    display: none;
+  }
+}

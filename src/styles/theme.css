@@ -1,0 +1,218 @@
+:root {
+  /* ── Backgrounds ── */
+  --color-bg-base:        #080910;
+  --color-bg-surface:     #0d0f1a;
+  --color-bg-midnight:    #0b0d1e;
+  --color-bg-glass:       rgba(12, 14, 24, 0.78);
+  --color-bg-glass-hover: rgba(18, 21, 36, 0.88);
+
+  /* ── Accents ── */
+  --color-gold:           #c9a84c;
+  --color-gold-light:     #e2c07a;
+  --color-gold-dim:       rgba(201, 168, 76, 0.18);
+
+  --color-violet:         #7c5cbf;
+  --color-violet-light:   #a07ee0;
+  --color-violet-dim:     rgba(124, 92, 191, 0.18);
+
+  --color-electric:       #2d7ef7;
+  --color-electric-light: #5da0ff;
+  --color-electric-dim:   rgba(45, 126, 247, 0.18);
+
+  /* ── Status: Success ── */
+  --color-success:        #22c55e;
+  --color-success-light:  #4ade80;
+  --color-success-dim:    rgba(34, 197, 94, 0.15);
+
+  /* ── Status: Warning ── */
+  --color-warning:        #f59e0b;
+  --color-warning-light:  #fbbf24;
+  --color-warning-dim:    rgba(245, 158, 11, 0.15);
+
+  /* ── Status: Danger ── */
+  --color-danger:         #ef4444;
+  --color-danger-light:   #f87171;
+  --color-danger-dim:     rgba(239, 68, 68, 0.15);
+
+  /* ── Status: Info ── */
+  --color-info:           #06b6d4;
+  --color-info-light:     #22d3ee;
+  --color-info-dim:       rgba(6, 182, 212, 0.15);
+
+  /* ── Text ── */
+  --color-text-primary:   #eceef5;
+  --color-text-secondary: #8b90a0;
+  --color-text-muted:     #4a4f62;
+
+  /* ── Borders ── */
+  --color-border:         rgba(255, 255, 255, 0.07);
+  --color-border-accent:  rgba(201, 168, 76, 0.28);
+
+  /* ── Shadows ── */
+  --shadow-card:
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+    0 8px 48px rgba(0, 0, 0, 0.75),
+    0 2px 0 rgba(255, 255, 255, 0.04) inset;
+  --shadow-panel:
+    0 0 80px rgba(124, 92, 191, 0.08),
+    0 0 40px rgba(45, 126, 247, 0.06),
+    0 32px 80px rgba(0, 0, 0, 0.8);
+  --shadow-glow-gold:     0 0 32px rgba(201, 168, 76, 0.22), 0 0 8px rgba(201, 168, 76, 0.12);
+  --shadow-glow-violet:   0 0 32px rgba(124, 92, 191, 0.28), 0 0 8px rgba(124, 92, 191, 0.15);
+  --shadow-glow-electric: 0 0 32px rgba(45, 126, 247, 0.28), 0 0 8px rgba(45, 126, 247, 0.15);
+
+  /* ── Border Radius ── */
+  --radius-sm:   6px;
+  --radius-md:   10px;
+  --radius-lg:   16px;
+  --radius-xl:   24px;
+  --radius-full: 9999px;
+
+  /* ── Spacing scale ── */
+  --space-px:  1px;
+  --space-1:   4px;
+  --space-2:   8px;
+  --space-3:   12px;
+  --space-4:   16px;
+  --space-5:   20px;
+  --space-6:   24px;
+  --space-7:   28px;
+  --space-8:   32px;
+  --space-9:   36px;
+  --space-10:  40px;
+  --space-12:  48px;
+  --space-14:  56px;
+  --space-16:  64px;
+  --space-18:  72px;
+  --space-20:  80px;
+  --space-24:  96px;
+  --space-28:  112px;
+  --space-32:  128px;
+
+  /* ── Typography scale ── */
+  --text-xs:   0.6875rem;
+  --text-sm:   0.8125rem;
+  --text-base: 0.9375rem;
+  --text-md:   1rem;
+  --text-lg:   1.125rem;
+  --text-xl:   1.25rem;
+  --text-2xl:  1.5rem;
+  --text-3xl:  1.875rem;
+  --text-4xl:  2.25rem;
+  --text-5xl:  3rem;
+
+  /* ── Font weights ── */
+  --weight-normal:   400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+  --weight-black:    800;
+
+  /* ── Line heights ── */
+  --leading-tight:  1.2;
+  --leading-snug:   1.375;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  /* ── Typography ── */
+  --font-sans:  'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono:  'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+  /* ── Transitions ── */
+  --transition-fast:   150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base:   250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow:   400ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-spring: 500ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Ambient glow animations ── */
+@keyframes ambientDrift {
+  0%   { transform: translate(0, 0) scale(1); }
+  33%  { transform: translate(4%, 3%) scale(1.06); }
+  66%  { transform: translate(-3%, 5%) scale(0.96); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+@keyframes ambientDriftReverse {
+  0%   { transform: translate(0, 0) scale(1); }
+  33%  { transform: translate(-5%, -3%) scale(1.08); }
+  66%  { transform: translate(4%, -4%) scale(0.95); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+@keyframes ambientPulse {
+  0%, 100% { opacity: 0.7; }
+  50%       { opacity: 1; }
+}
+
+@keyframes panelEntrance {
+  0% {
+    opacity: 0;
+    transform: translateY(28px) scale(0.97);
+    filter: blur(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes fadeUp {
+  0%   { opacity: 0; transform: translateY(12px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes logoGlow {
+  0%, 100% { box-shadow: var(--shadow-glow-gold); }
+  50%       { box-shadow: var(--shadow-glow-violet); }
+}
+
+@keyframes scanLine {
+  0%   { transform: translateY(-100%); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateY(100vh); opacity: 0; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes spinnerPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.85); }
+}
+
+@keyframes modalBackdropIn {
+  0%   { opacity: 0; backdrop-filter: blur(0px); }
+  100% { opacity: 1; backdrop-filter: blur(16px); }
+}
+
+@keyframes modalSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.96);
+    filter: blur(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes emptyStatePulse {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50%       { transform: scale(1.08); opacity: 1; }
+}

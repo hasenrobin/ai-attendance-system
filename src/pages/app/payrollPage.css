@@ -1,0 +1,189 @@
+/* ── Summary cards ──────────────────────────────────────────── */
+
+.pr-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-5);
+}
+
+/* ── Info / loading rows ────────────────────────────────────── */
+
+.pr-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-10) var(--space-6);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.pr-info-row--error {
+  color: rgba(239, 68, 68, 0.8);
+}
+
+/* ── Table ──────────────────────────────────────────────────── */
+
+.pr-table-wrap {
+  overflow-x: auto;
+  min-height: 120px;
+}
+
+.pr-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.pr-th {
+  padding: var(--space-3) var(--space-5);
+  text-align: left;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.pr-th--right,
+.pr-td--right {
+  text-align: right;
+}
+
+.pr-td {
+  padding: var(--space-4) var(--space-5);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  white-space: nowrap;
+}
+
+.pr-td--primary {
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.pr-td--muted {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  white-space: normal;
+}
+
+.pr-td--date {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  letter-spacing: 0.02em;
+}
+
+.pr-tr:last-child .pr-td {
+  border-bottom: none;
+}
+
+.pr-tr:hover .pr-td {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* ── Status badge ───────────────────────────────────────────── */
+
+.pr-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pr-badge--success {
+  color: var(--color-success-light);
+  background-color: var(--color-success-dim);
+  border: 1px solid rgba(34, 197, 94, 0.22);
+}
+
+.pr-badge--warning {
+  color: var(--color-warning-light);
+  background-color: var(--color-warning-dim);
+  border: 1px solid rgba(245, 158, 11, 0.22);
+}
+
+.pr-badge--electric {
+  color: var(--color-electric-light);
+  background-color: var(--color-electric-dim);
+  border: 1px solid rgba(45, 126, 247, 0.22);
+}
+
+.pr-badge--neutral {
+  color: var(--color-text-muted);
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-border);
+}
+
+/* ── Row actions ────────────────────────────────────────────── */
+
+.pr-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ── Hints / notes ──────────────────────────────────────────── */
+
+.pr-hint {
+  padding: var(--space-3) var(--space-6);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+
+/* ── Forms (modals) ─────────────────────────────────────────── */
+
+.pr-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.pr-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.pr-form-error {
+  padding: var(--space-3) var(--space-4);
+  background-color: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: rgba(239, 68, 68, 0.9);
+}
+
+.pr-form-note {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+
+@media (max-width: 1080px) {
+  .pr-stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .pr-stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pr-form-grid {
+    grid-template-columns: 1fr;
+  }
+}

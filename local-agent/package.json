@@ -1,0 +1,19 @@
+{
+  "name": "ai-attendance-local-agent",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Local Customer Agent — discovers IP cameras on the customer LAN and reports results to the cloud.",
+  "engines": {
+    "node": ">=18"
+  },
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.108.1",
+    "onvif": "^0.8.1"
+  }
+}

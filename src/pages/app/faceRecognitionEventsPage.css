@@ -1,0 +1,288 @@
+/* ── Filter bar ─────────────────────────────────────────────── */
+
+.fre-filter-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-4);
+}
+
+.fre-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* ── Recognition status badges (extends .as-status) ────────── */
+
+.as-status--recognized {
+  color: var(--color-success-light);
+  background-color: var(--color-success-dim);
+  border: 1px solid rgba(34, 197, 94, 0.22);
+}
+
+.as-status--low_confidence {
+  color: var(--color-warning-light);
+  background-color: var(--color-warning-dim);
+  border: 1px solid rgba(245, 158, 11, 0.22);
+}
+
+.as-status--unknown {
+  color: var(--color-text-muted);
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-border);
+}
+
+.as-status--rejected {
+  color: var(--color-danger-light);
+  background-color: var(--color-danger-dim);
+  border: 1px solid rgba(239, 68, 68, 0.22);
+}
+
+/* ── Recognition schedule state badges (extends .as-status) ─── */
+
+.as-status--checkout_mode {
+  color: var(--color-success-light);
+  background-color: var(--color-success-dim);
+  border: 1px solid rgba(34, 197, 94, 0.22);
+}
+
+.as-status--paused,
+.as-status--waiting_for_shift {
+  color: var(--color-text-muted);
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-border);
+}
+
+.as-status--manual_override {
+  color: var(--color-gold-light);
+  background-color: var(--color-gold-dim);
+  border: 1px solid rgba(201, 168, 76, 0.22);
+}
+
+.as-status--security_watch {
+  color: var(--color-danger-light);
+  background-color: var(--color-danger-dim);
+  border: 1px solid rgba(239, 68, 68, 0.22);
+}
+
+/* ── Attendance action badges (extends .as-status) ─────────── */
+
+.as-status--check_in,
+.as-status--check_out {
+  color: var(--color-success-light);
+  background-color: var(--color-success-dim);
+  border: 1px solid rgba(34, 197, 94, 0.22);
+}
+
+.as-status--ignore_duplicate {
+  color: var(--color-electric-light);
+  background-color: var(--color-electric-dim);
+  border: 1px solid rgba(45, 126, 247, 0.22);
+}
+
+.as-status--ignore_low_confidence {
+  color: var(--color-warning-light);
+  background-color: var(--color-warning-dim);
+  border: 1px solid rgba(245, 158, 11, 0.22);
+}
+
+.as-status--ignore_unrecognized,
+.as-status--ignore_rejected {
+  color: var(--color-text-muted);
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-border);
+}
+
+/* ── Recognition worker status badges (extends .as-status) ──── */
+
+.as-status--running {
+  color: var(--color-success-light);
+  background-color: var(--color-success-dim);
+  border: 1px solid rgba(34, 197, 94, 0.22);
+}
+
+.as-status--enabled {
+  color: var(--color-electric-light);
+  background-color: var(--color-electric-dim);
+  border: 1px solid rgba(45, 126, 247, 0.22);
+}
+
+.as-status--disabled,
+.as-status--never_reported {
+  color: var(--color-text-muted);
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-border);
+}
+
+.as-status--paused_by_schedule {
+  color: var(--color-warning-light);
+  background-color: var(--color-warning-dim);
+  border: 1px solid rgba(245, 158, 11, 0.22);
+}
+
+.as-status--stale {
+  color: var(--color-danger-light);
+  background-color: var(--color-danger-dim);
+  border: 1px solid rgba(239, 68, 68, 0.22);
+}
+
+/* ── Live Recognition Monitor ──────────────────────────────── */
+
+.frm-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.frm-select-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 240px;
+}
+
+.frm-player {
+  margin-bottom: var(--space-3);
+}
+
+.frm-status-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.frm-processing {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.frm-results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.frm-result-row {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 0.75fr 1.25fr;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.frm-result-name {
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.frm-result-confidence {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+/* ── Smart Recognition Schedule Status ─────────────────────── */
+
+.frs-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.frs-hint {
+  margin: 0;
+}
+
+.frs-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-4);
+}
+
+.frs-count {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.frs-count-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.frs-count-value--text {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.frs-count-label {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.frs-missing-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.frs-missing-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+
+.frs-missing-name {
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+.frs-missing-meta {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.frs-override {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.frs-override-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.frs-override-custom {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.frs-override-custom-input {
+  width: 110px;
+}

@@ -1,0 +1,634 @@
+/* ── Stat grid ──────────────────────────────────────────────── */
+
+.cm-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-5);
+}
+
+/* ── Form ───────────────────────────────────────────────────── */
+
+.cm-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.cm-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-5);
+}
+
+.cm-form-grid-full {
+  grid-column: 1 / -1;
+}
+
+.cm-form-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.cm-form-error {
+  padding: var(--space-3) var(--space-4);
+  background-color: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: rgba(239, 68, 68, 0.9);
+  line-height: 1.5;
+}
+
+.cm-form-warning {
+  padding: var(--space-3) var(--space-4);
+  background-color: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-warning-light);
+  line-height: 1.5;
+}
+
+.cm-page-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.cm-page-banner-dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: var(--text-lg);
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.cm-page-banner-dismiss:hover {
+  opacity: 1;
+}
+
+.cm-field-hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+  margin-top: var(--space-1);
+}
+
+.cm-section-divider {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin: 0;
+}
+
+.cm-section-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+/* ── Form section (Connection Method, Mode Status) ───────────── */
+
+.cm-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.cm-readonly-value {
+  padding: var(--space-3) var(--space-4);
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 0.9375rem;
+  color: var(--color-text-secondary);
+}
+
+/* ── ONVIF discovery panel ────────────────────────────────────── */
+
+.cm-discovery-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.cm-discovery-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.cm-discovery-row > span:first-child {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.cm-discovery-mono {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-xs);
+  text-align: right;
+  word-break: break-all;
+}
+
+/* ── NVR channel URL template buttons ────────────────────────── */
+
+.cm-template-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.cm-template-btn {
+  padding: var(--space-2) var(--space-3);
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.cm-template-btn:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(201, 168, 76, 0.35);
+  color: var(--color-text-primary);
+}
+
+/* ── Mode Status preview ──────────────────────────────────────── */
+
+.cm-mode-status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+}
+
+.cm-mode-status-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.cm-mode-status-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.cm-mode-status-badge {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  border: 1px solid var(--color-border);
+}
+
+.cm-mode-status-badge--operational,
+.cm-mode-status-badge--live_ready {
+  color: var(--color-success-light);
+  background-color: var(--color-success-dim);
+  border-color: rgba(34, 197, 94, 0.22);
+}
+
+.cm-mode-status-badge--needs_proxy {
+  color: var(--color-warning-light);
+  background-color: var(--color-warning-dim);
+  border-color: rgba(245, 158, 11, 0.22);
+}
+
+.cm-mode-status-badge--adapter_required {
+  color: var(--color-electric-light);
+  background-color: var(--color-electric-dim);
+  border-color: rgba(45, 126, 247, 0.22);
+}
+
+.cm-mode-status-badge--cloud_adapter_pending {
+  color: var(--color-violet-light);
+  background-color: var(--color-violet-dim);
+  border-color: rgba(124, 92, 191, 0.22);
+}
+
+.cm-mode-status-badge--not_configured {
+  color: var(--color-text-muted);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.cm-mode-status-badge--cloud_adapter_ready {
+  color: var(--color-violet-light);
+  background-color: var(--color-violet-dim);
+  border-color: rgba(124, 92, 191, 0.22);
+}
+
+.cm-mode-status-badge--credentials_required {
+  color: var(--color-warning-light);
+  background-color: var(--color-warning-dim);
+  border-color: rgba(245, 158, 11, 0.22);
+}
+
+.cm-mode-status-badge--partner_access_required {
+  color: var(--color-text-muted);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* ── Cloud Camera Integrations ───────────────────────────────── */
+
+.cm-cloud-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-5);
+}
+
+.cm-cloud-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.cm-cloud-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.cm-cloud-card-title {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  letter-spacing: 0.02em;
+}
+
+.cm-cloud-card-meta {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* ── Notices (Adapter Required / Cloud Pending hints) ────────── */
+
+.cm-notice {
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--color-electric-dim);
+  border: 1px solid rgba(45, 126, 247, 0.22);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-electric-light);
+  line-height: 1.5;
+}
+
+/* ── Select ─────────────────────────────────────────────────── */
+
+.cm-select-wrap {
+  position: relative;
+}
+
+.cm-select-wrap::after {
+  content: '';
+  position: absolute;
+  right: var(--space-4);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--color-text-muted);
+  pointer-events: none;
+}
+
+.cm-select {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  padding-right: calc(var(--space-4) + 22px);
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-size: 0.9375rem;
+  font-family: inherit;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.cm-select:focus {
+  border-color: rgba(201, 168, 76, 0.5);
+  box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.1);
+}
+
+.cm-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.cm-select option {
+  background-color: #0d0f1a;
+  color: var(--color-text-primary);
+}
+
+/* ── Toggle switch ──────────────────────────────────────────── */
+
+.cm-toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+}
+
+.cm-toggle-row + .cm-toggle-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.cm-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.cm-toggle-label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.cm-toggle {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 40px;
+  height: 22px;
+  margin-top: 2px;
+}
+
+.cm-toggle input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.cm-toggle input:disabled {
+  cursor: not-allowed;
+}
+
+.cm-toggle-track {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.cm-toggle-track::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: var(--color-text-secondary);
+  transition: transform var(--transition-fast), background-color var(--transition-fast);
+}
+
+.cm-toggle input:checked + .cm-toggle-track {
+  background-color: rgba(201, 168, 76, 0.35);
+  border-color: rgba(201, 168, 76, 0.5);
+}
+
+.cm-toggle input:checked + .cm-toggle-track::before {
+  transform: translateX(18px);
+  background-color: var(--color-gold-light);
+}
+
+.cm-toggle input:disabled + .cm-toggle-track {
+  opacity: 0.5;
+}
+
+/* ── Table wrap ─────────────────────────────────────────────── */
+
+.cm-table-wrap {
+  overflow-x: auto;
+  min-height: 120px;
+}
+
+/* ── Info / loading rows ────────────────────────────────────── */
+
+.cm-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-10) var(--space-6);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  letter-spacing: 0.04em;
+}
+
+.cm-info-row--error {
+  color: rgba(239, 68, 68, 0.8);
+}
+
+/* ── Table ──────────────────────────────────────────────────── */
+
+.cm-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.cm-th {
+  padding: var(--space-3) var(--space-5);
+  text-align: left;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.cm-th--right,
+.cm-td--right {
+  text-align: right;
+}
+
+.cm-td {
+  padding: var(--space-4) var(--space-5);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  white-space: nowrap;
+}
+
+.cm-td--primary {
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.cm-td--muted {
+  color: var(--color-text-muted);
+}
+
+.cm-tr:last-child .cm-td {
+  border-bottom: none;
+}
+
+.cm-tr:hover .cm-td {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* ── Status badge ───────────────────────────────────────────── */
+
+.cm-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.cm-status--active {
+  color: var(--color-success-light);
+  background-color: var(--color-success-dim);
+  border: 1px solid rgba(34, 197, 94, 0.22);
+}
+
+.cm-status--inactive {
+  color: var(--color-text-muted);
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-border);
+}
+
+/* ── Action buttons ─────────────────────────────────────────── */
+
+.cm-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.cm-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background-color: transparent;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.cm-icon-btn--edit {
+  color: var(--color-electric-light);
+  border-color: rgba(45, 126, 247, 0.2);
+}
+
+.cm-icon-btn--edit:hover {
+  background-color: var(--color-electric-dim);
+  border-color: rgba(45, 126, 247, 0.4);
+  box-shadow: var(--shadow-glow-electric);
+}
+
+.cm-icon-btn--danger {
+  color: var(--color-danger-light);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.cm-icon-btn--danger:hover {
+  background-color: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.4);
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.18);
+}
+
+.cm-icon-btn--success {
+  color: var(--color-success-light);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.cm-icon-btn--success:hover {
+  background-color: var(--color-success-dim);
+  border-color: rgba(34, 197, 94, 0.4);
+  box-shadow: 0 0 14px rgba(34, 197, 94, 0.18);
+}
+
+.cm-icon-btn--live {
+  color: var(--color-gold-light);
+  border-color: rgba(201, 168, 76, 0.25);
+}
+
+.cm-icon-btn--live:hover {
+  background-color: rgba(201, 168, 76, 0.1);
+  border-color: rgba(201, 168, 76, 0.45);
+  box-shadow: 0 0 14px rgba(201, 168, 76, 0.18);
+}
+
+/* ── Table footer ───────────────────────────────────────────── */
+
+.cm-table-footer {
+  padding: var(--space-3) var(--space-6);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  letter-spacing: 0.04em;
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .cm-stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .cm-stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cm-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cm-mode-status-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

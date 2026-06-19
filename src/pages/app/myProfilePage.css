@@ -1,0 +1,45 @@
+.mp-face-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-6);
+}
+
+.mp-face-photo {
+  width: 84px;
+  height: 84px;
+  border-radius: var(--radius-xl);
+  object-fit: cover;
+  border: 1px solid rgba(201, 168, 76, 0.25);
+  flex-shrink: 0;
+}
+
+.mp-face-photo--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(201, 168, 76, 0.18), rgba(124, 92, 191, 0.18));
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--color-gold-light);
+}
+
+.mp-face-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+  flex: 1;
+}
+
+@media (max-width: 600px) {
+  .mp-face-card {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .mp-face-info {
+    align-items: center;
+  }
+}

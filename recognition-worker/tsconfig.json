@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    /* skipLibCheck avoids checking the bodies of lib .d.ts files — with both
+       "node" and "DOM" in types/lib, @types/node's ambient fetch/Response/
+       etc. declarations can otherwise conflict with lib.dom.d.ts's. */
+    "skipLibCheck": true,
+
+    /* "node" gives global process/Buffer + node:fs/node:http/etc. module
+       types, needed by this worker. "DOM" (in lib, above) gives Blob/
+       HTMLVideoElement/etc., needed by the shared src/features/faceRecognition
+       modules this worker imports (FrameSource is a DOM | RawImageFrame union). */
+    "types": ["node"],
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src/**/*.ts"]
+}

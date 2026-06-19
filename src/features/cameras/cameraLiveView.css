@@ -1,0 +1,245 @@
+/* ── Body ─────────────────────────────────────────────────────── */
+
+.clv-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* ── Player ───────────────────────────────────────────────────── */
+
+.clv-player-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.clv-player {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background-color: #000;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.clv-media {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background-color: #000;
+}
+
+/* ── Placeholder states ──────────────────────────────────────── */
+
+.clv-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  aspect-ratio: 16 / 9;
+  padding: var(--space-8);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background-color: rgba(255, 255, 255, 0.02);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.clv-placeholder--error {
+  border-color: rgba(239, 68, 68, 0.22);
+  color: var(--color-danger-light);
+}
+
+.clv-placeholder--warning {
+  border-color: rgba(245, 158, 11, 0.22);
+  color: var(--color-warning-light);
+}
+
+.clv-placeholder-title {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.clv-placeholder--error .clv-placeholder-title,
+.clv-placeholder--warning .clv-placeholder-title {
+  color: inherit;
+}
+
+.clv-placeholder-message {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  max-width: 360px;
+  line-height: 1.6;
+}
+
+.clv-open-external-btn {
+  padding: var(--space-2) var(--space-5);
+  background-color: rgba(201, 168, 76, 0.1);
+  border: 1px solid rgba(201, 168, 76, 0.3);
+  border-radius: var(--radius-md);
+  color: var(--color-gold-light);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.clv-open-external-btn:hover {
+  background-color: rgba(201, 168, 76, 0.18);
+  border-color: rgba(201, 168, 76, 0.5);
+}
+
+/* ── Spinner ─────────────────────────────────────────────────── */
+
+.clv-spinner {
+  width: 28px;
+  height: 28px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--color-gold-light);
+  border-radius: 50%;
+  animation: clv-spin 0.8s linear infinite;
+}
+
+@keyframes clv-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Status badge ────────────────────────────────────────────── */
+
+.clv-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.clv-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: currentColor;
+}
+
+.clv-status--connecting {
+  color: var(--color-warning-light);
+  background-color: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.22);
+}
+
+.clv-status--connecting .clv-status-dot {
+  animation: clv-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes clv-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.clv-status--online {
+  color: var(--color-success-light);
+  background-color: var(--color-success-dim);
+  border-color: rgba(34, 197, 94, 0.22);
+}
+
+.clv-status--offline {
+  color: var(--color-text-muted);
+  background-color: rgba(255, 255, 255, 0.05);
+  border-color: var(--color-border);
+}
+
+.clv-status--error {
+  color: var(--color-danger-light);
+  background-color: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.22);
+}
+
+/* ── Channel list (NVR/DVR) ──────────────────────────────────── */
+
+.clv-channel-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.clv-channel-list-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-2);
+}
+
+.clv-channel-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--space-4);
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--transition-fast);
+}
+
+.clv-channel-item:hover {
+  background-color: rgba(201, 168, 76, 0.06);
+  border-color: rgba(201, 168, 76, 0.3);
+  color: var(--color-gold-light);
+}
+
+.clv-channel-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.clv-channel-name {
+  font-weight: 500;
+}
+
+.clv-channel-number {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* ── Back link ───────────────────────────────────────────────── */
+
+.clv-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.clv-back-link:hover {
+  color: var(--color-gold-light);
+}

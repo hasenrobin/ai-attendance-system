@@ -1,0 +1,39 @@
+{
+  "name": "ai-attendance-system",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "worker:start": "tsx recognition-worker/src/index.ts",
+    "worker:typecheck": "tsc -p recognition-worker/tsconfig.json --noEmit",
+    "worker:selftest": "tsx recognition-worker/src/selfTest.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.108.1",
+    "@vladmandic/face-api": "^1.7.15",
+    "hls.js": "^1.6.16",
+    "jpeg-js": "^0.4.4",
+    "onnxruntime-web": "^1.26.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "tsx": "^4.22.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.12.3",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^10.3.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.6.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.59.2",
+    "vite": "^8.0.12"
+  }
+}
