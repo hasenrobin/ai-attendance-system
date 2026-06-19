@@ -21,6 +21,14 @@ type AgentApiPayload = {
   metadata?: Record<string, unknown>
 }
 
+type CustomerAgentRow = {
+  id: string
+  company_id: string
+  branch_id: string | null
+  name: string
+  status: string
+}
+
 function requestIp(req: Request): string | null {
   return req.headers.get('cf-connecting-ip')
     ?? req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
@@ -234,6 +242,196 @@ async function revokeAgentToken(
   return jsonResponse({ status: 'revoked', revoked_count: tokenRows?.length ?? 0 })
 }
 
+async function listAgents(
+  supabase: SupabaseClient,
+  payload: AgentApiPayload,
+): Promise<Response> {
+  const companyId = payload.company_id?.trim()
+  if (!companyId) return jsonResponse({ error: 'company_id is required.' }, 400)
+
+  const { data: agents, error: agentsError } = await supabase
+    .from('customer_agents')
+    .select('id, company_id, branch_id, name, status, machine_name, os_platform, os_version, local_ip, public_ip, version, installed_at, paired_at, last_seen_at, last_heartbeat_at, capabilities, metadata, created_at, updated_at')
+    .eq('company_id', companyId)
+    .order('created_at', { ascending: false })
+
+  if (agentsError) return jsonResponse({ error: 'Failed to load agents.' }, 500)
+
+  const agentIds = (agents ?? []).map(agent => agent.id as string)
+  const [{ data: branches, error: branchesError }, { data: tokens, error: tokensError }] = await Promise.all([
+    supabase
+      .from('branches')
+      .select('id, name')
+      .eq('company_id', companyId),
+    agentIds.length > 0
+      ? supabase
+          .from('agent_tokens')
+          .select('id, agent_id, status, issued_at, last_used_at, expires_at, revoked_at')
+          .in('agent_id', agentIds)
+      : Promise.resolve({ data: [], error: null }),
+  ])
+
+  if (branchesError) return jsonResponse({ error: 'Failed to load branches.' }, 500)
+  if (tokensError) return jsonResponse({ error: 'Failed to load agent token state.' }, 500)
+
+  const branchNameById = new Map((branches ?? []).map(branch => [branch.id as string, branch.name as string]))
+  const tokensByAgentId = new Map<string, Array<Record<string, unknown>>>()
+  for (const token of tokens ?? []) {
+    const agentId = token.agent_id as string
+    const existing = tokensByAgentId.get(agentId) ?? []
+    existing.push(token as Record<string, unknown>)
+    tokensByAgentId.set(agentId, existing)
+  }
+
+  return jsonResponse({
+    status: 'ok',
+    agents: (agents ?? []).map(agent => {
+      const agentTokens = tokensByAgentId.get(agent.id as string) ?? []
+      const activeTokens = agentTokens.filter(token => token.status === 'active')
+      const lastTokenUsedAt = agentTokens
+        .map(token => token.last_used_at as string | null)
+        .filter(Boolean)
+        .sort()
+        .at(-1) ?? null
+
+      return {
+        ...agent,
+        branch_name: agent.branch_id ? branchNameById.get(agent.branch_id as string) ?? null : null,
+        token_count: agentTokens.length,
+        active_token_count: activeTokens.length,
+        last_token_used_at: lastTokenUsedAt,
+      }
+    }),
+  })
+}
+
+async function loadAgent(supabase: SupabaseClient, agentId: string): Promise<CustomerAgentRow | null> {
+  const { data, error } = await supabase
+    .from('customer_agents')
+    .select('id, company_id, branch_id, name, status')
+    .eq('id', agentId)
+    .maybeSingle()
+
+  if (error || !data) return null
+  return data as CustomerAgentRow
+}
+
+async function assertBranchBelongsToCompany(
+  supabase: SupabaseClient,
+  branchId: string | null,
+  companyId: string,
+): Promise<boolean> {
+  if (branchId === null) return true
+
+  const { data, error } = await supabase
+    .from('branches')
+    .select('id')
+    .eq('id', branchId)
+    .eq('company_id', companyId)
+    .maybeSingle()
+
+  return !error && Boolean(data)
+}
+
+async function updateAgent(
+  supabase: SupabaseClient,
+  req: Request,
+  payload: AgentApiPayload,
+): Promise<Response> {
+  const agentId = payload.agent_id?.trim()
+  if (!agentId) return jsonResponse({ error: 'agent_id is required.' }, 400)
+
+  const agent = await loadAgent(supabase, agentId)
+  if (!agent) return jsonResponse({ error: 'Agent not found.' }, 404)
+  if (agent.status === 'revoked') return jsonResponse({ error: 'Revoked agents cannot be updated.' }, 409)
+
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  const nextName = payload.agent_name?.trim()
+  if (nextName) updates.name = nextName
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'branch_id')) {
+    const nextBranchId = payload.branch_id?.trim() || null
+    const validBranch = await assertBranchBelongsToCompany(supabase, nextBranchId, agent.company_id)
+    if (!validBranch) return jsonResponse({ error: 'Branch not found for this agent company.' }, 404)
+    updates.branch_id = nextBranchId
+  }
+
+  if (Object.keys(updates).length === 1) {
+    return jsonResponse({ error: 'No supported agent updates were provided.' }, 400)
+  }
+
+  const { data: updatedAgent, error } = await supabase
+    .from('customer_agents')
+    .update(updates)
+    .eq('id', agentId)
+    .select('id, company_id, branch_id, name, status, machine_name, version, last_seen_at, last_heartbeat_at, updated_at')
+    .single()
+
+  if (error) return jsonResponse({ error: 'Failed to update agent.' }, 500)
+
+  await audit(supabase, req, {
+    agent_id: agentId,
+    company_id: agent.company_id,
+    event_type: 'agent_updated',
+    success: true,
+    details: {
+      name_changed: Boolean(nextName),
+      branch_changed: Object.prototype.hasOwnProperty.call(updates, 'branch_id'),
+    },
+  })
+
+  return jsonResponse({ status: 'updated', agent: updatedAgent })
+}
+
+async function setAgentStatus(
+  supabase: SupabaseClient,
+  req: Request,
+  payload: AgentApiPayload,
+  status: 'active' | 'disabled' | 'revoked',
+): Promise<Response> {
+  const agentId = payload.agent_id?.trim()
+  if (!agentId) return jsonResponse({ error: 'agent_id is required.' }, 400)
+
+  const agent = await loadAgent(supabase, agentId)
+  if (!agent) return jsonResponse({ error: 'Agent not found.' }, 404)
+  if (agent.status === 'revoked' && status !== 'revoked') {
+    return jsonResponse({ error: 'Revoked agents cannot be reactivated.' }, 409)
+  }
+
+  const now = new Date().toISOString()
+  const { data: updatedAgent, error } = await supabase
+    .from('customer_agents')
+    .update({ status, updated_at: now })
+    .eq('id', agentId)
+    .select('id, company_id, branch_id, name, status, machine_name, version, last_seen_at, last_heartbeat_at, updated_at')
+    .single()
+
+  if (error) return jsonResponse({ error: `Failed to set agent status to ${status}.` }, 500)
+
+  let revokedTokenCount = 0
+  if (status === 'revoked') {
+    const { data: tokenRows, error: tokenError } = await supabase
+      .from('agent_tokens')
+      .update({ status: 'revoked', revoked_at: now })
+      .eq('agent_id', agentId)
+      .eq('status', 'active')
+      .select('id')
+
+    if (tokenError) return jsonResponse({ error: 'Agent was revoked, but token revocation failed.' }, 500)
+    revokedTokenCount = tokenRows?.length ?? 0
+  }
+
+  await audit(supabase, req, {
+    agent_id: agentId,
+    company_id: agent.company_id,
+    event_type: status === 'revoked' ? 'agent_revoked' : status === 'disabled' ? 'agent_disabled' : 'agent_enabled',
+    success: true,
+    details: { previous_status: agent.status, revoked_token_count: revokedTokenCount },
+  })
+
+  return jsonResponse({ status, agent: updatedAgent, revoked_token_count: revokedTokenCount })
+}
+
 async function heartbeat(
   supabase: SupabaseClient,
   req: Request,
@@ -329,6 +527,26 @@ Deno.serve(async (req: Request) => {
     return createPairingCode(supabase, req, payload, admin.userId, pairingPepper)
   }
 
+  if (action === 'list_agents') {
+    return listAgents(supabase, payload)
+  }
+
+  if (action === 'update_agent') {
+    return updateAgent(supabase, req, payload)
+  }
+
+  if (action === 'disable_agent') {
+    return setAgentStatus(supabase, req, payload, 'disabled')
+  }
+
+  if (action === 'enable_agent') {
+    return setAgentStatus(supabase, req, payload, 'active')
+  }
+
+  if (action === 'revoke_agent') {
+    return setAgentStatus(supabase, req, payload, 'revoked')
+  }
+
   if (action === 'revoke_pairing_code') {
     return revokePairingCode(supabase, req, payload, admin.userId)
   }
@@ -341,6 +559,11 @@ Deno.serve(async (req: Request) => {
     error: 'Unsupported action.',
     supported_actions: [
       'create_pairing_code',
+      'list_agents',
+      'update_agent',
+      'disable_agent',
+      'enable_agent',
+      'revoke_agent',
       'revoke_pairing_code',
       'revoke_agent_token',
       'heartbeat',

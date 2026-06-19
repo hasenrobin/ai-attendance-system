@@ -44,6 +44,7 @@ import { PlatformAdminGate } from '../components/auth/PlatformAdminGate'
 import { AdminShell } from '../layouts/AdminShell'
 import { AdminDashboard } from '../pages/admin/AdminDashboard'
 import { AdminCamerasPage } from '../pages/admin/AdminCamerasPage'
+import { AdminAgentsPage } from '../pages/admin/AdminAgentsPage'
 import { useI18n } from '../hooks/useI18n'
 
 function getPath(): string {
@@ -188,7 +189,9 @@ export function AppRouter() {
   }
 
   if (path === ROUTES.ADMIN_HOME || path.startsWith(ROUTES.ADMIN_HOME + '/')) {
-    const adminPage = path.startsWith('/admin/cameras')
+    const adminPage = path.startsWith('/admin/agents')
+      ? <AdminAgentsPage />
+      : path.startsWith('/admin/cameras')
       ? <AdminCamerasPage />
       : <AdminDashboard />
 

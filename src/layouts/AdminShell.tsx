@@ -55,6 +55,7 @@ export function AdminShell({ children }: AdminShellProps) {
           {[
             { label: 'Dashboard', path: '/admin' },
             { label: 'Cameras',   path: '/admin/cameras' },
+            { label: 'Agents',    path: '/admin/agents' },
           ].map(item => (
             <button
               key={item.path}
