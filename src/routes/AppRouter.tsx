@@ -40,6 +40,9 @@ import { AttendanceSourcesPage } from '../pages/app/AttendanceSourcesPage'
 import { FaceRecognitionEventsPage } from '../pages/app/FaceRecognitionEventsPage'
 import { SecurityPage } from '../pages/app/SecurityPage'
 import { SubscriptionsPage } from '../pages/app/SubscriptionsPage'
+import { PlatformAdminGate } from '../components/auth/PlatformAdminGate'
+import { AdminShell } from '../layouts/AdminShell'
+import { AdminDashboard } from '../pages/admin/AdminDashboard'
 import { useI18n } from '../hooks/useI18n'
 
 function getPath(): string {
@@ -180,6 +183,16 @@ export function AppRouter() {
       <AuthGate requireAuth={false}>
         <LoginPage />
       </AuthGate>
+    )
+  }
+
+  if (path === ROUTES.ADMIN_HOME || path.startsWith(ROUTES.ADMIN_HOME + '/')) {
+    return (
+      <PlatformAdminGate>
+        <AdminShell>
+          <AdminDashboard />
+        </AdminShell>
+      </PlatformAdminGate>
     )
   }
 

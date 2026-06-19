@@ -7,6 +7,7 @@ export type AppUserProfile = {
   full_name: string
   email: string
   status: string
+  is_platform_admin: boolean
 }
 
 export type AuthContextValue = {

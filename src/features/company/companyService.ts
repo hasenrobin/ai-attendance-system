@@ -12,7 +12,7 @@ type GetCurrentUserCompanyResult = {
 export async function getCurrentUserCompany(userId: string): Promise<GetCurrentUserCompanyResult> {
   const { data: profile, error: profileError } = await supabase
     .from('user_profiles')
-    .select('id, company_id, employee_id, full_name, email, status')
+    .select('id, company_id, employee_id, full_name, email, status, is_platform_admin')
     .eq('id', userId)
     .single()
 
