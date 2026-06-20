@@ -32,11 +32,17 @@ function withTimeout(fn, ms) {
 // ── Mode runners ─────────────────────────────────────────────────────────────
 
 async function runDirectRtsp(cameraId, camera) {
+  // Log camera field presence so the exact failure path is visible in agent.log.
+  console.log(`[provision:direct_rtsp] camera.rtsp_url     : ${camera.rtsp_url ? redact(camera.rtsp_url) : 'NULL'}`)
+  console.log(`[provision:direct_rtsp] camera.username     : ${camera.username ? '***set***' : 'null'}`)
+  console.log(`[provision:direct_rtsp] camera.password     : ${camera.password ? '***set***' : 'null'}`)
+
   const rtspUrlWithCreds = buildRtspUrl({
     rtspUrl:  camera.rtsp_url,
     username: camera.username,
     password: camera.password,
   })
+  console.log(`[provision:direct_rtsp] rtspUrlWithCreds    : ${redact(rtspUrlWithCreds ?? 'null')}`)
   return runRtspPipeline({ cameraId, rtspUrlWithCreds })
 }
 
@@ -157,7 +163,11 @@ export async function processProvisionJob(client, job) {
     }, PROVISION_TIMEOUT_MS)
 
     finalStatus = result.ok ? 'completed' : 'failed'
-    console.log(`[provision] Job ${jobId} ${finalStatus}. ok=${result.ok}`)
+    if (!result.ok) {
+      console.error(`[provision] Job ${jobId} FAILED. stage=${result.stage} error=${result.error ?? result.reason ?? 'unknown'}`)
+    } else {
+      console.log(`[provision] Job ${jobId} completed. liveStreamUrl=${result.liveStreamUrl ?? 'n/a'}`)
+    }
   } catch (err) {
     result = { ok: false, stage: 'timeout', error: err.message, warnings: [] }
     finalStatus = 'timeout'

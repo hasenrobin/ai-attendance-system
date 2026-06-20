@@ -31,7 +31,12 @@ export function buildPathConfig({ rtspUrlWithCreds, pathName, transcode }) {
 
   const outputUrl = `${MEDIAMTX_RTSP_BASE}/${pathName}`
   const args = buildTranscodeArgs(rtspUrlWithCreds, outputUrl)
-  const runOnInit = [FFMPEG_PATH, ...args].join(' ')
+  // On Windows, FFMPEG_PATH may contain spaces (e.g. C:\Program Files\...).
+  // Quote it so MediaMTX can execute the command string via cmd.exe.
+  const ffmpegCmd = (process.platform === 'win32' && FFMPEG_PATH.includes(' '))
+    ? `"${FFMPEG_PATH}"`
+    : FFMPEG_PATH
+  const runOnInit = [ffmpegCmd, ...args].join(' ')
   return { runOnInit, runOnInitRestart: true }
 }
 
