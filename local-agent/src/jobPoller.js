@@ -82,7 +82,14 @@ export function startJobPoller(identity) {
       ;(async () => {
         try {
           const { jobs } = await client.requestAction('agent_get_provision_jobs', { limit: 1 })
-          if (jobs?.[0]) await processProvisionJob(client, jobs[0])
+          const count = jobs?.length ?? 0
+          if (count > 0) {
+            console.log(`[poller] fetched provision jobs count=${count}`)
+            console.log(`[poller] processing provision job id=${jobs[0].id} mode=${jobs[0].provision_mode ?? jobs[0].job_type}`)
+            await processProvisionJob(client, jobs[0])
+          } else {
+            console.log('[poller] no provision jobs')
+          }
         } catch (err) {
           console.error(`[poller] Provision fetch/process failed: ${err.message}`)
         } finally {

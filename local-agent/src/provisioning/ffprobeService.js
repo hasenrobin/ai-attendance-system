@@ -1,9 +1,10 @@
-import { execFile } from 'node:child_process'
+import { execFile, exec } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { promisify } from 'node:util'
 import { FFPROBE_PATH, FFPROBE_TIMEOUT_MS } from './config.js'
 
 const execFileAsync = promisify(execFile)
+const execAsync     = promisify(exec)
 
 export class ProbeError extends Error {
   constructor(message) {
@@ -24,19 +25,27 @@ export async function probeStream(rtspUrlWithCreds) {
 
   let stdout
   try {
-    // On Windows, execFile with a path that contains spaces (e.g. C:\Program Files\...)
-    // can fail with ENOENT even when the file exists. shell: true routes through cmd.exe
-    // which handles quoted paths reliably — same fix as the MediaMTX spawn issue.
-    const result = await execFileAsync(
-      FFPROBE_PATH,
-      args,
-      {
-        timeout: FFPROBE_TIMEOUT_MS,
+    if (process.platform === 'win32') {
+      // execFile + shell:true passes FFPROBE_PATH as a separate argv token to
+      // cmd.exe /d /s /c, which splits on the first space and fails with
+      // "'C:\Program' is not recognized". Use exec() instead so we control
+      // quoting: the path is wrapped in double quotes when it contains spaces,
+      // matching the same pattern used for ffmpeg in mediamtxConfig.js.
+      const exeArg = FFPROBE_PATH.includes(' ') ? `"${FFPROBE_PATH}"` : FFPROBE_PATH
+      const command = [exeArg, ...args].join(' ')
+      console.log(`[ffprobe] command : ${command.replace(args[3], '****')}`)
+      const result = await execAsync(command, {
+        timeout:   FFPROBE_TIMEOUT_MS,
         maxBuffer: 10 * 1024 * 1024,
-        shell: process.platform === 'win32',
-      },
-    )
-    stdout = result.stdout
+      })
+      stdout = result.stdout
+    } else {
+      const result = await execFileAsync(FFPROBE_PATH, args, {
+        timeout:   FFPROBE_TIMEOUT_MS,
+        maxBuffer: 10 * 1024 * 1024,
+      })
+      stdout = result.stdout
+    }
     console.log(`[ffprobe] completed successfully`)
   } catch (err) {
     // Log the raw error so it appears in agent.log for diagnostics.
