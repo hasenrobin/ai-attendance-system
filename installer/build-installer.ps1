@@ -104,14 +104,51 @@ foreach ($d in @(
 }
 
 # ── Download NSSM ─────────────────────────────────────────────────────────────
+# NSSM has no official GitHub release or public mirror.
+# nssm.cc occasionally returns 503 (transient). Retry up to 3 times, then
+# fall back to a clear manual-download instruction.
 
 $nssmZip  = "$BuildDir\_tmp\nssm-$NssmVersion.zip"
 $nssmUrl  = "https://nssm.cc/release/nssm-$NssmVersion.zip"
 $nssmDest = "$BuildDir\tools\nssm.exe"
 
 if (-not (Test-Path $nssmDest)) {
-    Write-Host "  Downloading NSSM $NssmVersion..." -ForegroundColor Yellow
-    Invoke-WebRequest $nssmUrl -OutFile $nssmZip -UseBasicParsing
+    $nssmDownloaded = $false
+    $maxRetries     = 3
+    $retryDelaySec  = 8
+
+    for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
+        $attemptLabel = if ($attempt -eq 1) { '' } else { " (retry $attempt/$maxRetries)" }
+        Write-Host "  Downloading NSSM $NssmVersion$attemptLabel..." -ForegroundColor Yellow
+        try {
+            Invoke-WebRequest $nssmUrl -OutFile $nssmZip -UseBasicParsing -ErrorAction Stop
+            $nssmDownloaded = $true
+            break
+        } catch {
+            Write-Warning "  Attempt $attempt failed: $($_.Exception.Message)"
+            if ($attempt -lt $maxRetries) {
+                Write-Host "  Waiting $retryDelaySec s before retry..." -ForegroundColor Yellow
+                Start-Sleep -Seconds $retryDelaySec
+            }
+        }
+    }
+
+    if (-not $nssmDownloaded) {
+        Write-Host ''
+        Write-Host '  ┌──────────────────────────────────────────────────────────────┐' -ForegroundColor Yellow
+        Write-Host '  │  NSSM could not be downloaded automatically.                 │' -ForegroundColor Yellow
+        Write-Host '  │  To continue, place nssm.exe manually:                       │' -ForegroundColor Yellow
+        Write-Host '  │                                                              │' -ForegroundColor Yellow
+        Write-Host '  │  1. Open https://nssm.cc/download in a browser.             │' -ForegroundColor Yellow
+        Write-Host "  │  2. Download nssm-$NssmVersion.zip and extract it.                  │" -ForegroundColor Yellow
+        Write-Host '  │  3. Copy the win64\nssm.exe file to:                        │' -ForegroundColor Yellow
+        Write-Host "  │       $nssmDest" -ForegroundColor Yellow
+        Write-Host '  │  4. Re-run this script (NSSM download will be skipped).     │' -ForegroundColor Yellow
+        Write-Host '  └──────────────────────────────────────────────────────────────┘' -ForegroundColor Yellow
+        Write-Host ''
+        Write-Error "NSSM download failed after $maxRetries attempts. Place nssm.exe at: $nssmDest"
+    }
+
     Expand-Archive $nssmZip -DestinationPath "$BuildDir\_tmp\nssm-extract" -Force
     $nssmExe = Get-ChildItem "$BuildDir\_tmp\nssm-extract" -Recurse -Filter 'nssm.exe' |
         Where-Object { $_.Directory.Name -eq 'win64' } |
