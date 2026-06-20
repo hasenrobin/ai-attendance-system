@@ -1,10 +1,6 @@
-import { execFile, exec } from 'node:child_process'
+import { spawn }      from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { promisify } from 'node:util'
 import { FFPROBE_PATH, FFPROBE_TIMEOUT_MS } from './config.js'
-
-const execFileAsync = promisify(execFile)
-const execAsync     = promisify(exec)
 
 export class ProbeError extends Error {
   constructor(message) {
@@ -13,52 +9,100 @@ export class ProbeError extends Error {
   }
 }
 
+// spawn() without a shell: Node.js calls CreateProcess() on Windows which
+// handles paths with spaces internally — no cmd.exe, no quoting needed.
+// exec()/execFile()+shell:true both route through cmd.exe and split the path
+// at the first space, producing "'C:\Program' is not recognized".
+// spawn() eliminates that class of error entirely.
+function spawnProbe(cmd, args, { timeout, maxBuffer }) {
+  return new Promise((resolve, reject) => {
+    let stdout  = ''
+    let stderr  = ''
+    let bytes   = 0
+    let settled = false
+
+    const child = spawn(cmd, args, { windowsHide: true })
+
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      child.kill()
+      reject(Object.assign(new Error('ffprobe timed out'), { killed: true, stderr }))
+    }, timeout)
+
+    child.stdout.on('data', chunk => {
+      bytes += chunk.length
+      if (bytes > maxBuffer) {
+        clearTimeout(timer)
+        if (settled) return
+        settled = true
+        child.kill()
+        reject(Object.assign(new Error('ffprobe output exceeded maxBuffer'), { code: 'ERR_BUFFER_OVERFLOW', stderr }))
+        return
+      }
+      stdout += chunk
+    })
+
+    child.stderr.on('data', chunk => { stderr += chunk })
+
+    child.on('error', err => {
+      clearTimeout(timer)
+      if (settled) return
+      settled = true
+      err.stderr = stderr
+      reject(err)
+    })
+
+    child.on('close', code => {
+      clearTimeout(timer)
+      if (settled) return
+      settled = true
+      if (code === 0) {
+        resolve({ stdout, stderr })
+      } else {
+        reject(Object.assign(
+          new Error(`ffprobe exited ${code}${stderr ? '\n' + stderr.slice(0, 300) : ''}`),
+          { code, stdout, stderr },
+        ))
+      }
+    })
+  })
+}
+
 // Runs ffprobe against an RTSP URL (credentials already embedded) and
-// reports the first video/audio stream's codec. This also doubles as the
-// "is this RTSP URL/credentials valid and reachable" check.
+// reports the first video/audio stream's codec.
 export async function probeStream(rtspUrlWithCreds) {
-  // Diagnostics logged before every ffprobe attempt.
   console.log(`[ffprobe] path   : ${JSON.stringify(FFPROBE_PATH)}`)
   console.log(`[ffprobe] exists : ${existsSync(FFPROBE_PATH)}`)
 
-  const args = ['-rtsp_transport', 'tcp', '-i', rtspUrlWithCreds, '-show_streams', '-of', 'json']
+  // The Node.js spawnProbe timeout (FFPROBE_TIMEOUT_MS = 10 s) kills the
+  // process if it hangs. No -stimeout flag: it is a format-level private
+  // option that some ffprobe builds do not expose at the command line.
+  const args = [
+    '-v', 'error',
+    '-rtsp_transport', 'tcp',
+    '-i', rtspUrlWithCreds,
+    '-show_streams', '-of', 'json',
+  ]
 
   let stdout
   try {
-    if (process.platform === 'win32') {
-      // execFile + shell:true passes FFPROBE_PATH as a separate argv token to
-      // cmd.exe /d /s /c, which splits on the first space and fails with
-      // "'C:\Program' is not recognized". Use exec() instead so we control
-      // quoting: the path is wrapped in double quotes when it contains spaces,
-      // matching the same pattern used for ffmpeg in mediamtxConfig.js.
-      const exeArg = FFPROBE_PATH.includes(' ') ? `"${FFPROBE_PATH}"` : FFPROBE_PATH
-      const command = [exeArg, ...args].join(' ')
-      console.log(`[ffprobe] command : ${command.replace(args[3], '****')}`)
-      const result = await execAsync(command, {
-        timeout:   FFPROBE_TIMEOUT_MS,
-        maxBuffer: 10 * 1024 * 1024,
-      })
-      stdout = result.stdout
-    } else {
-      const result = await execFileAsync(FFPROBE_PATH, args, {
-        timeout:   FFPROBE_TIMEOUT_MS,
-        maxBuffer: 10 * 1024 * 1024,
-      })
-      stdout = result.stdout
-    }
-    console.log(`[ffprobe] completed successfully`)
+    const result = await spawnProbe(FFPROBE_PATH, args, {
+      timeout:   FFPROBE_TIMEOUT_MS,
+      maxBuffer: 10 * 1024 * 1024,
+    })
+    stdout = result.stdout
+    console.log('[ffprobe] completed successfully')
   } catch (err) {
-    // Log the raw error so it appears in agent.log for diagnostics.
     console.error(`[ffprobe] error code    : ${err.code ?? 'n/a'}`)
-    console.error(`[ffprobe] error signal  : ${err.signal ?? 'none'}`)
     console.error(`[ffprobe] error killed  : ${err.killed ?? false}`)
     console.error(`[ffprobe] error message : ${err.message}`)
     if (err.stderr) {
-      const stderrSnip = String(err.stderr).slice(0, 400).replace(/\n/g, ' ')
-      console.error(`[ffprobe] stderr snippet: ${stderrSnip}`)
+      const snip = String(err.stderr).slice(0, 400).replace(/\n/g, ' ')
+      console.error(`[ffprobe] stderr snippet: ${snip}`)
     }
 
-    if (err.killed || err.signal || err.code === 'ETIMEDOUT') {
+    if (err.killed) {
       throw new ProbeError('ffprobe timed out — camera unreachable or RTSP URL/credentials are incorrect')
     }
     if (err.code === 'ENOENT') {
@@ -75,14 +119,14 @@ export async function probeStream(rtspUrlWithCreds) {
   }
 
   const streams = Array.isArray(parsed.streams) ? parsed.streams : []
-  const video = streams.find(s => s.codec_type === 'video')
-  const audio = streams.find(s => s.codec_type === 'audio')
+  const video   = streams.find(s => s.codec_type === 'video')
+  const audio   = streams.find(s => s.codec_type === 'audio')
 
   const probe = {
     videoCodec: video?.codec_name ?? null,
     audioCodec: audio?.codec_name ?? null,
-    hasVideo: Boolean(video),
-    hasAudio: Boolean(audio),
+    hasVideo:   Boolean(video),
+    hasAudio:   Boolean(audio),
   }
   console.log(`[ffprobe] result: videoCodec=${probe.videoCodec} audioCodec=${probe.audioCodec} hasVideo=${probe.hasVideo} hasAudio=${probe.hasAudio}`)
   return probe

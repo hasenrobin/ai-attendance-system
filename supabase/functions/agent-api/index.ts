@@ -882,12 +882,26 @@ async function agentGetProvisionJobs(
   const auth = await authenticateAgentRequest(supabase, req, tokenPepper)
   if (!auth.ok) return jsonResponse({ error: auth.error }, auth.status)
 
+  const now = new Date().toISOString()
+
+  // Mark any pending jobs whose timeout_at has already passed as 'timeout'
+  // so they don't accumulate in the pending queue forever. Non-fatal.
+  await supabase
+    .from('camera_provision_jobs')
+    .update({ status: 'timeout', completed_at: now, error_message: 'Job timed out waiting for agent.' })
+    .eq('company_id', auth.agent.company_id)
+    .eq('customer_agent_id', auth.agent.id)
+    .eq('status', 'pending')
+    .lt('timeout_at', now)
+
+  // Return only non-expired pending jobs.
   let query = supabase
     .from('camera_provision_jobs')
     .select(provisionJobSelect())
     .eq('company_id', auth.agent.company_id)
     .eq('customer_agent_id', auth.agent.id)
     .eq('status', 'pending')
+    .gt('timeout_at', now)
     .order('created_at', { ascending: true })
     .limit(clampLimit(payload.limit, 1, 5))
 
@@ -919,7 +933,7 @@ async function agentClaimProvisionJob(
 
   const now = new Date().toISOString()
 
-  // Atomic claim: pending → running
+  // Atomic claim: pending → running (only if not yet expired).
   let claimQuery = supabase
     .from('camera_provision_jobs')
     .update({ status: 'running', started_at: now })
@@ -927,6 +941,7 @@ async function agentClaimProvisionJob(
     .eq('company_id', auth.agent.company_id)
     .eq('customer_agent_id', auth.agent.id)
     .eq('status', 'pending')
+    .gt('timeout_at', now)
 
   if (auth.agent.branch_id) {
     claimQuery = claimQuery.or(`branch_id.is.null,branch_id.eq.${auth.agent.branch_id}`)
