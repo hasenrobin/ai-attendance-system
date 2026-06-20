@@ -58,28 +58,18 @@ export async function startMediaMtx() {
   console.log(`[mediamtx] exists cfg : ${existsSync(configPath)}`)
   console.log(`[mediamtx] exists cwd : ${existsSync(cwd)}`)
 
-  // On Windows, spawn() with paths that contain spaces (e.g. C:\Program Files\...)
-  // can fail with ENOENT even when the file exists, because Node.js/libuv passes
-  // the path to CreateProcess in a way that Windows cannot resolve. Routing through
-  // cmd.exe /d /s /c "..." avoids this: the shell handles quoted paths reliably.
+  // spawn() calls CreateProcess on Windows — Node.js passes the executable
+  // path and args array directly without a shell, so paths with spaces
+  // (e.g. C:\Program Files\...) are handled correctly by the OS.
+  // cmd.exe /d /s /c was previously used but caused "'C:\Program Files\...'
+  // is not recognized" because the quoted command string was mis-parsed.
   console.log(`[mediamtx] Starting (platform=${process.platform})...`)
 
-  if (process.platform === 'win32') {
-    mediaMtxProcess = spawn(
-      'cmd.exe',
-      ['/d', '/s', '/c', `"${executablePath}" "${configPath}"`],
-      {
-        cwd,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        windowsHide: true,
-      },
-    )
-  } else {
-    mediaMtxProcess = spawn(executablePath, [configPath], {
-      cwd,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-  }
+  mediaMtxProcess = spawn(executablePath, [configPath], {
+    cwd,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+  })
 
   mediaMtxProcess.stdout.on('data', data => {
     const line = data.toString().trim()
