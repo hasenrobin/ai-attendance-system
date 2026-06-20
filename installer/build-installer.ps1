@@ -96,7 +96,7 @@ foreach ($d in @(
     "$BuildDir\runtime",
     "$BuildDir\tools",
     "$BuildDir\mediamtx",
-    "$BuildDir\agent\src",
+    "$BuildDir\agent",
     "$BuildDir\_tmp",
     $OutputDir
 )) {
@@ -191,9 +191,13 @@ try {
 }
 
 # ── Copy agent source ─────────────────────────────────────────────────────────
+# Copy src\ INTO $BuildDir\agent\ (not INTO a pre-created $BuildDir\agent\src\).
+# When the destination directory ($BuildDir\agent\) already exists and the
+# source is a named directory, PowerShell copies the directory itself as a
+# child — producing the correct $BuildDir\agent\src\ without nesting.
 
 Write-Host '  Copying agent source...' -ForegroundColor Yellow
-Copy-Item (Join-Path $AgentDir 'src')          "$BuildDir\agent\src"          -Recurse -Force
+Copy-Item (Join-Path $AgentDir 'src')          "$BuildDir\agent\"             -Recurse -Force
 Copy-Item (Join-Path $AgentDir 'node_modules') "$BuildDir\agent\node_modules" -Recurse -Force
 Copy-Item (Join-Path $AgentDir 'package.json') "$BuildDir\agent\package.json" -Force
 
