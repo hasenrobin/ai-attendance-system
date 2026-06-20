@@ -8,6 +8,8 @@
 // - Local provisioning API compatible with src/features/cameras/provisioningService.ts
 // ============================================================================
 
+import { appendFileSync, mkdirSync } from 'node:fs'
+import path from 'node:path'
 import { startMediaMtx, stopMediaMtx, describeMediaMtxPaths } from './mediaMtxProcess.js'
 import { startProvisioningApi } from './provisioning/server.js'
 import { loadIdentity, identityPath } from './identity/identityStore.js'
@@ -22,6 +24,30 @@ import {
   PROVISIONING_API_HOST,
   PROVISIONING_API_PORT,
 } from './config.js'
+
+// ── Early file-based startup log ─────────────────────────────────────────────
+// Written synchronously at process start so crash diagnostics are captured even
+// when NSSM's AppStdout redirect has not yet engaged or fails to create the file.
+// Location mirrors identityStore.js: ATTENDANCEAI_IDENTITY_DIR or ProgramData.
+const _dataDir = process.env.ATTENDANCEAI_IDENTITY_DIR
+  ?? (process.platform === 'win32'
+    ? path.join(process.env.PROGRAMDATA ?? 'C:\\ProgramData', 'AttendanceAI', 'Agent')
+    : path.join(process.env.HOME ?? '~', '.attendanceai-agent'))
+
+function writeStartupLog(line) {
+  try {
+    mkdirSync(path.join(_dataDir, 'logs'), { recursive: true })
+    appendFileSync(
+      path.join(_dataDir, 'logs', 'startup.log'),
+      `${new Date().toISOString()} ${line}\n`,
+      'utf8',
+    )
+  } catch { /* never crash due to log failure */ }
+}
+
+writeStartupLog(`[startup] agent process started pid=${process.pid} platform=${process.platform}`)
+writeStartupLog(`[startup] dataDir=${_dataDir}`)
+writeStartupLog(`[startup] node=${process.version} execPath=${process.execPath}`)
 
 // ── Graceful shutdown (SIGTERM from NSSM/service, SIGINT from Ctrl-C) ────────
 // Registered early so any signal received during startup still cleans up.

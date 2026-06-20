@@ -1,10 +1,10 @@
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 import {
   MEDIAMTX_API_BASE,
   MEDIAMTX_AUTO_START,
-  MEDIAMTX_DIR,
   MEDIAMTX_EXECUTABLE,
   MEDIAMTX_YML_PATH,
 } from './config.js'
@@ -43,12 +43,41 @@ export async function startMediaMtx() {
     return false
   }
 
-  console.log(`[mediamtx] Starting ${MEDIAMTX_EXECUTABLE} with ${MEDIAMTX_YML_PATH}`)
-  mediaMtxProcess = spawn(MEDIAMTX_EXECUTABLE, [MEDIAMTX_YML_PATH], {
-    cwd: path.dirname(MEDIAMTX_EXECUTABLE),
-    stdio: ['ignore', 'pipe', 'pipe'],
-    windowsHide: true,
-  })
+  const executablePath = MEDIAMTX_EXECUTABLE
+  const configPath     = MEDIAMTX_YML_PATH
+  const cwd            = path.dirname(executablePath)
+
+  // Diagnostics logged before every spawn attempt so they appear in agent.log
+  // even when the spawn itself fails immediately.
+  console.log(`[mediamtx] executable : ${JSON.stringify(executablePath)}`)
+  console.log(`[mediamtx] config     : ${JSON.stringify(configPath)}`)
+  console.log(`[mediamtx] cwd        : ${JSON.stringify(cwd)}`)
+  console.log(`[mediamtx] exists exe : ${existsSync(executablePath)}`)
+  console.log(`[mediamtx] exists cfg : ${existsSync(configPath)}`)
+  console.log(`[mediamtx] exists cwd : ${existsSync(cwd)}`)
+
+  // On Windows, spawn() with paths that contain spaces (e.g. C:\Program Files\...)
+  // can fail with ENOENT even when the file exists, because Node.js/libuv passes
+  // the path to CreateProcess in a way that Windows cannot resolve. Routing through
+  // cmd.exe /d /s /c "..." avoids this: the shell handles quoted paths reliably.
+  console.log(`[mediamtx] Starting (platform=${process.platform})...`)
+
+  if (process.platform === 'win32') {
+    mediaMtxProcess = spawn(
+      'cmd.exe',
+      ['/d', '/s', '/c', `"${executablePath}" "${configPath}"`],
+      {
+        cwd,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+      },
+    )
+  } else {
+    mediaMtxProcess = spawn(executablePath, [configPath], {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  }
 
   mediaMtxProcess.stdout.on('data', data => {
     const line = data.toString().trim()
@@ -80,7 +109,15 @@ export async function startMediaMtx() {
 export function stopMediaMtx() {
   if (!mediaMtxProcess) return
   try {
-    mediaMtxProcess.kill('SIGTERM')
+    if (process.platform === 'win32' && mediaMtxProcess.pid) {
+      // Kill the full process tree so the cmd.exe wrapper AND mediamtx.exe both exit.
+      spawn('taskkill', ['/pid', String(mediaMtxProcess.pid), '/f', '/t'], {
+        stdio: 'ignore',
+        windowsHide: true,
+      })
+    } else {
+      mediaMtxProcess.kill('SIGTERM')
+    }
   } catch {}
   mediaMtxProcess = null
 }
