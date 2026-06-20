@@ -10,7 +10,7 @@
 
 import { appendFileSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { startMediaMtx, stopMediaMtx, describeMediaMtxPaths } from './mediaMtxProcess.js'
+import { startMediaMtx, stopMediaMtx, describeMediaMtxPaths, startMediaMtxWatchdog } from './mediaMtxProcess.js'
 import { startProvisioningApi } from './provisioning/server.js'
 import { loadIdentity, identityPath } from './identity/identityStore.js'
 import { pairAgent } from './pairing/pairingClient.js'
@@ -85,16 +85,27 @@ if (!identity) {
   setInterval(() => {}, 60_000)
 } else {
   console.log(`[identity] Loaded agentId=${identity.agentId} companyId=${identity.companyId} machine="${identity.machineName}"`)
-  await startHeartbeatService(identity)
-  startJobPoller(identity)
 
+  // ── 1. Heartbeat first so the agent appears "online" in the UI immediately ──
+  await startHeartbeatService(identity)
+
+  // ── 2. MediaMTX must be running before the job poller can claim provision jobs ──
   const mediaMtx = describeMediaMtxPaths()
   console.log(`[mediamtx] executable=${mediaMtx.executable}`)
   console.log(`[mediamtx] config=${mediaMtx.config}`)
-  await startMediaMtx()
+  const mediaMtxReady = await startMediaMtx()
+  if (!mediaMtxReady) {
+    writeStartupLog('[mediamtx] WARN: did not start within startup window — provision jobs will be deferred until watchdog restarts it')
+  }
 
+  // ── 3. Watchdog: restart MediaMTX if it crashes later ─────────────────────
+  startMediaMtxWatchdog(writeStartupLog)
+
+  // ── 4. Local provisioning HTTP API (port 8787, legacy browser→agent path) ──
   startProvisioningApi()
 
+  // ── 5. Job poller last — MediaMTX is already up (or watchdog is managing it) ──
+  startJobPoller(identity)
+
   console.log('[agent] Ready. Agent API heartbeat, discovery polling, and local provisioning are active.')
-  console.log('[agent] Legacy direct-Supabase modules remain present but are not used by startup.')
 }

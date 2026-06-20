@@ -11,6 +11,7 @@ import { runRtspPipeline }           from './rtspPipeline.js'
 import { discoverOnvifStream, OnvifError } from './onvifService.js'
 import { resolveChannelRtspUrl }     from './nvrChannelUrl.js'
 import { checkNvrParentReachable }   from './nvrParentCheck.js'
+import { isMediaMtxReady }           from '../mediaMtxProcess.js'
 
 // Hard cap for the entire provision pipeline (ffprobe + MediaMTX + HLS verify).
 // Individual steps have their own shorter timeouts (see provisioning/config.js).
@@ -131,6 +132,19 @@ function sanitizeResult(result) {
 
 export async function processProvisionJob(client, job) {
   const { id: jobId, job_type, provision_mode, camera_id } = job
+
+  // Guard: 'provision' jobs run ffprobe → MediaMTX API → HLS verify.
+  // If MediaMTX API is not yet reachable, do NOT claim the job — leave it
+  // pending so the next poller tick (5 s) retries. The watchdog in
+  // mediaMtxProcess.js will restart MediaMTX and the job will succeed once it
+  // is up. 'validate_nvr' is a TCP-only probe and does not need MediaMTX.
+  if (job_type === 'provision') {
+    const ready = await isMediaMtxReady()
+    if (!ready) {
+      console.warn(`[provision] job ${jobId} deferred — MediaMTX API not reachable yet. Will retry next poll.`)
+      return
+    }
+  }
 
   // Claim the job — response includes camera data + credentials.
   let claimed

@@ -10,9 +10,11 @@ import {
 } from './config.js'
 
 const STARTUP_TIMEOUT_MS = 10_000
-const STARTUP_POLL_MS = 500
+const STARTUP_POLL_MS    = 500
+const WATCHDOG_INTERVAL_MS = 30_000
 
 let mediaMtxProcess = null
+let _watchdogTimer  = null
 
 async function mediaMtxApiReady() {
   try {
@@ -104,6 +106,40 @@ export async function startMediaMtx() {
     console.warn(`[mediamtx] API did not become ready at ${MEDIAMTX_API_BASE}. Provisioning will fail until MediaMTX is running.`)
   }
   return ready
+}
+
+// Returns true if the MediaMTX API is currently reachable (non-blocking probe).
+// Used by provisionJobProcessor to guard provision jobs before claiming.
+export async function isMediaMtxReady() {
+  return mediaMtxApiReady()
+}
+
+// Starts a periodic watchdog that restarts MediaMTX if it is no longer reachable.
+// Runs every WATCHDOG_INTERVAL_MS (30 s). writeLog is the startup-log callback from
+// index.js so failures reach ProgramData\AttendanceAI\Agent\logs\startup.log even
+// when NSSM's stdout redirect is lagging.
+export function startMediaMtxWatchdog(writeLog) {
+  if (_watchdogTimer) return  // idempotent
+
+  _watchdogTimer = setInterval(async () => {
+    // If the process handle is alive, trust the OS — no extra API check.
+    if (mediaMtxProcess !== null) return
+
+    // Process handle is gone: either never started or crashed. Check the API
+    // first in case someone is running MediaMTX externally.
+    if (await mediaMtxApiReady()) return
+
+    const msg = '[mediamtx:watchdog] MediaMTX is not running — attempting restart'
+    console.warn(msg)
+    writeLog(msg)
+
+    const ready = await startMediaMtx()
+    const result = ready
+      ? '[mediamtx:watchdog] Restart succeeded.'
+      : '[mediamtx:watchdog] Restart failed — will retry in 30 s.'
+    console.warn(result)
+    writeLog(result)
+  }, WATCHDOG_INTERVAL_MS)
 }
 
 export function stopMediaMtx() {
