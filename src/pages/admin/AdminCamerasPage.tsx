@@ -25,7 +25,7 @@ import { LuxuryCard } from '../../components/ui/LuxuryCard'
 import { LuxuryModal } from '../../components/ui/LuxuryModal'
 import { LuxuryButton } from '../../components/ui/LuxuryButton'
 import type { Camera, CameraConnectionMode } from '../../types/camera'
-import { getCameras, getCameraById, createCamera, updateCamera, deactivateCamera } from '../../features/cameras/cameraService'
+import { getCameras, getCameraById, createCamera, updateCamera, deactivateCamera, deleteCamera } from '../../features/cameras/cameraService'
 import { getBranches } from '../../features/branches/branchService'
 import { getAdminCompanies } from '../../features/company/companyService'
 import { CameraLiveViewModal } from '../../features/cameras/CameraLiveViewModal'
@@ -90,6 +90,17 @@ function SlashIcon() {
     </svg>
   )
 }
+function TrashIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6M14 11v6" />
+      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+    </svg>
+  )
+}
 function PowerIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
@@ -146,6 +157,7 @@ export function AdminCamerasPage() {
   const [createOpen, setCreateOpen]         = useState(false)
   const [editTarget, setEditTarget]         = useState<Camera | null>(null)
   const [deactivateTarget, setDeactivateTarget] = useState<Camera | null>(null)
+  const [deleteTarget, setDeleteTarget]         = useState<Camera | null>(null)
   const [liveViewTarget, setLiveViewTarget] = useState<Camera | null>(null)
   const [healthDetailsTarget, setHealthDetailsTarget] = useState<Camera | null>(null)
 
@@ -419,6 +431,16 @@ export function AdminCamerasPage() {
     setDeactivateTarget(null)
   }
 
+  async function handleDelete() {
+    const target = deleteTarget
+    if (!target) return
+    setSubmitting(true)
+    const { error } = await deleteCamera(target.id)
+    setSubmitting(false)
+    if (!error) setCameras(prev => prev.filter(c => c.id !== target.id))
+    setDeleteTarget(null)
+  }
+
   async function handleActivate(camera: Camera) {
     const { data, error } = await updateCamera(camera.id, { status: 'active' })
     if (!error && data) setCameras(prev => prev.map(c => c.id === data.id ? data : c))
@@ -594,6 +616,13 @@ export function AdminCamerasPage() {
                         ) : (
                           <button className="cm-icon-btn cm-icon-btn--success" onClick={() => handleActivate(camera)} title={t('cameras.activateTooltip')}><PowerIcon /></button>
                         )}
+                        <button
+                          className="cm-icon-btn cm-icon-btn--delete"
+                          onClick={() => setDeleteTarget(camera)}
+                          title="Permanently delete camera"
+                        >
+                          <TrashIcon />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -699,6 +728,36 @@ export function AdminCamerasPage() {
           {t('common.deactivateConfirmPrefix')}{' '}
           <strong style={{ color: 'var(--color-text-primary)' }}>{deactivateTarget?.name}</strong>
           {t('common.deactivateConfirmSuffix')}
+        </p>
+      </LuxuryModal>
+
+      {/* ── Delete Confirmation Modal (Platform Admin only) ── */}
+      <LuxuryModal
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Permanently Delete Camera"
+        width={460}
+        actions={
+          <>
+            <LuxuryButton variant="ghost" onClick={() => setDeleteTarget(null)}>Cancel</LuxuryButton>
+            <LuxuryButton variant="secondary" onClick={handleDelete} disabled={submitting}>
+              {submitting ? 'Deleting…' : 'Delete Permanently'}
+            </LuxuryButton>
+          </>
+        }
+      >
+        <p style={{ color: 'var(--color-text-secondary)', lineHeight: 1.7, margin: '0 0 var(--space-3)' }}>
+          This will permanently delete{' '}
+          <strong style={{ color: 'var(--color-text-primary)' }}>{deleteTarget?.name}</strong>
+          {' '}and all associated data:
+        </p>
+        <ul style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)', margin: '0 0 var(--space-3)', paddingLeft: 'var(--space-5)', lineHeight: 1.8 }}>
+          <li>Provision jobs and health status</li>
+          <li>NVR channels using this as parent will lose their parent reference</li>
+          <li>Attendance source links will be cleared</li>
+        </ul>
+        <p style={{ color: 'var(--color-danger, #e53e3e)', fontSize: 'var(--text-sm)', fontWeight: 600, margin: 0 }}>
+          This action cannot be undone.
         </p>
       </LuxuryModal>
 

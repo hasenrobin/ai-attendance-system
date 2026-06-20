@@ -601,6 +601,19 @@
   box-shadow: 0 0 14px rgba(201, 168, 76, 0.18);
 }
 
+/* Platform Admin only — permanently delete camera */
+.cm-icon-btn--delete {
+  color: rgba(239, 68, 68, 0.7);
+  border-color: rgba(239, 68, 68, 0.15);
+}
+
+.cm-icon-btn--delete:hover {
+  color: rgb(239, 68, 68);
+  background-color: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.22);
+}
+
 /* ── Table footer ───────────────────────────────────────────── */
 
 .cm-table-footer {

@@ -148,6 +148,19 @@ export async function updateCamera(
   return { data: data as Camera, error: null }
 }
 
+// Platform Admin only — hard delete. RLS: cameras_platform_admin_all (FOR ALL)
+// FK cascades: camera_provision_jobs → CASCADE, camera_health_status → CASCADE.
+// All other camera FKs (attendance_sources, face_recognition_events, etc.) → SET NULL.
+export async function deleteCamera(cameraId: string): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from('cameras')
+    .delete()
+    .eq('id', cameraId)
+
+  if (error) return { error: error.message }
+  return { error: null }
+}
+
 export async function deactivateCamera(cameraId: string): Promise<CameraResult> {
   const { data, error } = await supabase
     .from('cameras')
