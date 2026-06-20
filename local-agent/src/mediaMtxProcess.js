@@ -45,7 +45,7 @@ export async function startMediaMtx() {
 
   console.log(`[mediamtx] Starting ${MEDIAMTX_EXECUTABLE} with ${MEDIAMTX_YML_PATH}`)
   mediaMtxProcess = spawn(MEDIAMTX_EXECUTABLE, [MEDIAMTX_YML_PATH], {
-    cwd: MEDIAMTX_DIR,
+    cwd: path.dirname(MEDIAMTX_EXECUTABLE),
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   })
