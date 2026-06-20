@@ -33,3 +33,7 @@ dist/
 camera-proxy/*.exe
 *.tar.gz
 
+# Installer build artefacts — binaries downloaded at build time, never committed.
+installer/build/
+installer/output/
+
