@@ -135,11 +135,120 @@ All configuration is in `.env.agent`.
 | `CAMERA_PROXY_ALLOWED_ORIGINS` | no | Extra comma-separated frontend origins for CORS. |
 | `ENABLE_CLOUD_STREAM_MANAGER` | no | Legacy direct-Supabase path; not started by Phase 3C. |
 
+## Windows Service (PHASE 4A Slice A)
+
+Run the agent as a background Windows Service using
+[NSSM](https://nssm.cc/download) so it starts automatically on boot and
+restarts if it crashes — no terminal window required.
+
+### Prerequisites
+
+1. **Node.js 18+** installed (used by the service).
+2. **NSSM** (`nssm.exe`) placed in `local-agent\tools\nssm.exe` or anywhere in
+   `PATH`.
+3. `.env.agent` configured (copy `.env.agent.example` and fill in values).
+4. `npm install` has been run inside the `local-agent` folder.
+5. A pairing code from **Platform Admin > Agents** in `.env.agent` if the agent
+   has never been paired on this machine.
+
+### Install
+
+Open **PowerShell as Administrator** in the `local-agent` folder:
+
+```powershell
+.\install-service.ps1
+```
+
+Or specify node.exe explicitly:
+
+```powershell
+.\install-service.ps1 -NodePath "C:\Program Files\nodejs\node.exe"
+```
+
+The script:
+- Finds `node.exe` and `nssm.exe`
+- Creates the `AttendanceAIAgent` Windows Service
+- Sets `AppDirectory` to the `local-agent` folder
+- Redirects stdout → `C:\ProgramData\AttendanceAI\Agent\logs\agent.log`
+- Redirects stderr → `C:\ProgramData\AttendanceAI\Agent\logs\agent-err.log`
+- Rotates logs at 10 MB
+- Sets restart throttle of 30 s on crash
+- Starts the service immediately
+
+On first run the agent pairs using `AGENT_PAIRING_CODE` from `.env.agent`,
+saves `identity.json`, and appears **Online** in `/admin/agents`.
+
+### Start / Stop
+
+```powershell
+net start AttendanceAIAgent
+net stop  AttendanceAIAgent
+```
+
+Or with NSSM:
+
+```powershell
+nssm start AttendanceAIAgent
+nssm stop  AttendanceAIAgent
+```
+
+### View Logs
+
+```powershell
+# Follow live output
+Get-Content 'C:\ProgramData\AttendanceAI\Agent\logs\agent.log' -Wait -Tail 50
+
+# Errors only
+Get-Content 'C:\ProgramData\AttendanceAI\Agent\logs\agent-err.log' -Tail 50
+```
+
+### Uninstall
+
+```powershell
+.\uninstall-service.ps1
+```
+
+This stops and removes the service. It **does not** delete:
+- `identity.json` — agent keeps its identity; no re-pairing needed after
+  reinstall
+- `logs\` directory
+- `.env.agent` configuration
+
+### Re-install / Update
+
+Stop the service, replace files in the `local-agent` folder, then restart:
+
+```powershell
+net stop AttendanceAIAgent
+# ... update files / run npm install ...
+net start AttendanceAIAgent
+```
+
+Or uninstall, update, and reinstall:
+
+```powershell
+.\uninstall-service.ps1
+# ... update files ...
+.\install-service.ps1
+```
+
+### File Locations
+
+| Path | Purpose |
+|------|---------|
+| `local-agent\` | Agent source code and config |
+| `C:\ProgramData\AttendanceAI\Agent\identity.json` | Agent token (written at runtime) |
+| `C:\ProgramData\AttendanceAI\Agent\.env.agent` | *(optional)* config outside install dir |
+| `C:\ProgramData\AttendanceAI\Agent\logs\agent.log` | Stdout (NSSM redirect) |
+| `C:\ProgramData\AttendanceAI\Agent\logs\agent-err.log` | Stderr (NSSM redirect) |
+
+---
+
 ## Not Included In This MVP
 
-- No Windows installer.
-- No Windows Service.
-- No system tray.
+- No Windows installer (.exe setup wizard).
+- No portable Node.js bundling.
+- No system tray UI.
 - No auto-update.
 - No Recognition Worker changes.
 - No Attendance Pipeline changes.

@@ -8,11 +8,11 @@
 // - Local provisioning API compatible with src/features/cameras/provisioningService.ts
 // ============================================================================
 
-import { startMediaMtx, describeMediaMtxPaths } from './mediaMtxProcess.js'
+import { startMediaMtx, stopMediaMtx, describeMediaMtxPaths } from './mediaMtxProcess.js'
 import { startProvisioningApi } from './provisioning/server.js'
 import { loadIdentity, identityPath } from './identity/identityStore.js'
 import { pairAgent } from './pairing/pairingClient.js'
-import { startHeartbeatService } from './service/heartbeatService.js'
+import { startHeartbeatService, stopHeartbeatService } from './service/heartbeatService.js'
 import { startJobPoller } from './jobPoller.js'
 import {
   AGENT_NAME,
@@ -22,6 +22,18 @@ import {
   PROVISIONING_API_HOST,
   PROVISIONING_API_PORT,
 } from './config.js'
+
+// ── Graceful shutdown (SIGTERM from NSSM/service, SIGINT from Ctrl-C) ────────
+// Registered early so any signal received during startup still cleans up.
+// stopHeartbeatService and stopMediaMtx are no-ops if not yet started.
+function shutdown(signal) {
+  console.log(`[agent] Received ${signal}. Shutting down gracefully...`)
+  stopHeartbeatService()
+  stopMediaMtx()
+  process.exit(0)
+}
+process.on('SIGINT',  () => shutdown('SIGINT'))
+process.on('SIGTERM', () => shutdown('SIGTERM'))
 
 console.log('============================================================')
 console.log(' AI Attendance - Local Customer Agent v1.0.0')
