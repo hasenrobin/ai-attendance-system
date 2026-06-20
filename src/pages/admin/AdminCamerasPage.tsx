@@ -25,14 +25,25 @@ import { LuxuryCard } from '../../components/ui/LuxuryCard'
 import { LuxuryModal } from '../../components/ui/LuxuryModal'
 import { LuxuryButton } from '../../components/ui/LuxuryButton'
 import type { Camera, CameraConnectionMode } from '../../types/camera'
-import { getCameras, createCamera, updateCamera, deactivateCamera } from '../../features/cameras/cameraService'
+import { getCameras, getCameraById, createCamera, updateCamera, deactivateCamera } from '../../features/cameras/cameraService'
 import { getBranches } from '../../features/branches/branchService'
 import { getAdminCompanies } from '../../features/company/companyService'
 import { CameraLiveViewModal } from '../../features/cameras/CameraLiveViewModal'
 import { CameraHealthModal, healthBadgeClass, formatHealthTimestamp } from '../../features/cameras/CameraHealthModal'
 import { useCameraHealthMonitor } from '../../features/cameras/useCameraHealthMonitor'
 import { runCameraHealthCheck } from '../../features/cameras/cameraHealthService'
-import { runConnectionFlow, type OnvifDiscoveryInfo } from '../../features/cameras/connectionFlow'
+import {
+  runConnectionFlow,
+  needsAgentProvisioning,
+  resolveProvisionJobType,
+  type OnvifDiscoveryInfo,
+} from '../../features/cameras/connectionFlow'
+import {
+  selectOnlineAgent,
+  createProvisionJob,
+  pollProvisionJob,
+  TERMINAL_PROVISION_STATUSES,
+} from '../../features/cameras/provisionJobService'
 import { CloudCameraSettings } from '../../features/cameras/CloudCameraSettings'
 import { CameraDiscoveryPanel } from '../../features/cameras/CameraDiscoveryPanel'
 import {
@@ -146,6 +157,7 @@ export function AdminCamerasPage() {
   const [submitting, setSubmitting]         = useState(false)
   const [provisionWarning, setProvisionWarning] = useState<string | null>(null)
   const [onvifDiscovery, setOnvifDiscovery] = useState<OnvifDiscoveryInfo | null>(null)
+  const [provisioningCameraIds, setProvisioningCameraIds] = useState<Set<string>>(new Set())
 
   const [cloudAccountStatuses, setCloudAccountStatuses] = useState<CameraCloudAccountStatus[]>([])
   const [discoveryOpen, setDiscoveryOpen] = useState(false)
@@ -219,44 +231,137 @@ export function AdminCamerasPage() {
 
   async function applyConnectionFlow(camera: Camera, form: CameraFormState, previous?: Camera) {
     const mode = (form.connection_mode || null) as CameraConnectionMode | null
-    const parentCamera = form.parent_nvr_id ? cameras.find(c => c.id === form.parent_nvr_id) ?? null : null
-    const fields = {
-      ...effectiveConnectionFields(form, previous),
-      parent_nvr_host:     parentCamera?.nvr_host ?? '',
-      parent_nvr_port:     parentCamera?.stream_port != null ? String(parentCamera.stream_port) : '',
-      parent_nvr_username: parentCamera?.username ?? '',
-      parent_nvr_password: parentCamera?.password_encrypted ?? '',
+
+    if (mode && needsAgentProvisioning(mode)) {
+      // ── Phase 3E: Agent-based provisioning (direct_rtsp / onvif / nvr_dvr) ──
+      //
+      // 1. Save connection fields to DB immediately so the agent can fetch
+      //    credentials at claim time without needing the service-role key.
+      // 2. Find an online agent, create a provision job, then poll for result.
+      //    On success the agent-api has already updated cameras.live_stream_url.
+
+      const parentCameraId = mode === 'nvr_dvr' && form.nvr_record_type === 'parent'
+        ? null : (form.parent_nvr_id || null)
+
+      const { data: saved } = await updateCamera(camera.id, {
+        ...buildConnectionUpdates(form),
+        ...buildIdentifierUpdates(mode, form),
+        connection_mode: mode,
+        stream_port: form.stream_port.trim() ? Number(form.stream_port.trim()) : null,
+        parent_camera_id: parentCameraId,
+      })
+      const savedCamera = saved ?? camera
+      setCameras(prev => prev.map(c => c.id === savedCamera.id ? savedCamera : c))
+
+      // Find the most-recently-seen online agent for this company.
+      const { data: agent, error: agentError } = await selectOnlineAgent(camera.company_id)
+      if (!agent) {
+        setProvisionWarning(agentError ?? 'No active Local Agent found. Please ensure an agent is running.')
+        return
+      }
+
+      // Determine job type: NVR parent → validate_nvr, everything else → provision.
+      const isNvrChannel = mode === 'nvr_dvr'
+        && form.nvr_record_type === 'channel'
+        && Boolean(form.parent_nvr_id)
+      const { jobType, provisionMode } = resolveProvisionJobType(mode, isNvrChannel)
+
+      // Create the provision job via agent-api.
+      const { data: jobId, error: jobError } = await createProvisionJob({
+        companyId:        camera.company_id,
+        branchId:         camera.branch_id || null,
+        customerAgentId:  agent.id,
+        cameraId:         camera.id,
+        jobType,
+        provisionMode,
+      })
+      if (!jobId) {
+        setProvisionWarning(jobError ?? 'Failed to create provision job.')
+        return
+      }
+
+      // Mark camera as provisioning and start polling (fire and forget).
+      setProvisioningCameraIds(prev => new Set(prev).add(camera.id))
+      setProvisionWarning(null)
+
+      pollProvisionJob(jobId, {
+        onUpdate: (job) => {
+          if (TERMINAL_PROVISION_STATUSES.has(job.status)) {
+            setProvisioningCameraIds(prev => {
+              const next = new Set(prev)
+              next.delete(camera.id)
+              return next
+            })
+          }
+
+          if (job.status === 'completed' && job.result?.ok === true) {
+            // agent-api already wrote live_stream_url + stream_type to cameras.
+            void getCameraById(camera.id).then(({ data: refreshed }) => {
+              if (refreshed) {
+                setCameras(prev => prev.map(c => c.id === refreshed.id ? refreshed : c))
+                void runCameraHealthCheck({
+                  id: refreshed.id, company_id: refreshed.company_id,
+                  stream_type: refreshed.stream_type,
+                  live_stream_url: refreshed.live_stream_url,
+                  connection_mode: refreshed.connection_mode,
+                  parent_camera_id: parentCameraId,
+                  nvr_host: refreshed.nvr_host,
+                  stream_port: refreshed.stream_port,
+                  cloud_device_id: refreshed.cloud_device_id,
+                }, undefined)
+              }
+            })
+            void refreshCloudAccountStatuses()
+          } else if (job.status === 'failed' || job.status === 'timeout') {
+            setProvisionWarning(
+              `${t('cameras.provisioning.failed')}: ${job.error_message ?? 'Provision job did not complete.'}`
+            )
+          }
+        },
+      })
+    } else {
+      // ── Original path: browser-based flow for non-agent modes ──────────────
+      // direct_hls, direct_mjpeg, external_url, cloud/P2P — unchanged.
+
+      const parentCamera = form.parent_nvr_id ? cameras.find(c => c.id === form.parent_nvr_id) ?? null : null
+      const fields = {
+        ...effectiveConnectionFields(form, previous),
+        parent_nvr_host:     parentCamera?.nvr_host ?? '',
+        parent_nvr_port:     parentCamera?.stream_port != null ? String(parentCamera.stream_port) : '',
+        parent_nvr_username: parentCamera?.username ?? '',
+        parent_nvr_password: parentCamera?.password_encrypted ?? '',
+      }
+
+      const flow = await runConnectionFlow(camera.id, mode, fields, camera.company_id)
+      const patch = Object.keys(flow.patch).length > 0
+        ? flow.patch
+        : { connection_mode: mode, stream_type: null, live_stream_url: null }
+
+      const parentCameraId = mode === 'nvr_dvr' && form.nvr_record_type === 'parent'
+        ? null : (form.parent_nvr_id || null)
+
+      const { data } = await updateCamera(camera.id, {
+        ...buildConnectionUpdates(form),
+        ...patch,
+        ...buildIdentifierUpdates(mode, form),
+        stream_port: form.stream_port.trim() ? Number(form.stream_port.trim()) : null,
+        parent_camera_id: parentCameraId,
+      })
+      const updated = data ?? camera
+      setCameras(prev => prev.map(c => c.id === updated.id ? updated : c))
+
+      await runCameraHealthCheck({
+        id: updated.id, company_id: updated.company_id,
+        stream_type: updated.stream_type, live_stream_url: updated.live_stream_url,
+        connection_mode: updated.connection_mode, parent_camera_id: updated.parent_camera_id,
+        nvr_host: updated.nvr_host, stream_port: updated.stream_port,
+        cloud_device_id: updated.cloud_device_id,
+      }, undefined)
+
+      setOnvifDiscovery(flow.discovery ?? null)
+      setProvisionWarning(flow.error_reason ? `${t('cameras.provisioning.failed')}: ${flow.error_reason}` : null)
+      void refreshCloudAccountStatuses()
     }
-
-    const flow = await runConnectionFlow(camera.id, mode, fields, camera.company_id)
-    const patch = Object.keys(flow.patch).length > 0
-      ? flow.patch
-      : { connection_mode: mode, stream_type: null, live_stream_url: null }
-
-    const parentCameraId = mode === 'nvr_dvr' && form.nvr_record_type === 'parent'
-      ? null : (form.parent_nvr_id || null)
-
-    const { data } = await updateCamera(camera.id, {
-      ...buildConnectionUpdates(form),
-      ...patch,
-      ...buildIdentifierUpdates(mode, form),
-      stream_port: form.stream_port.trim() ? Number(form.stream_port.trim()) : null,
-      parent_camera_id: parentCameraId,
-    })
-    const updated = data ?? camera
-    setCameras(prev => prev.map(c => c.id === updated.id ? updated : c))
-
-    await runCameraHealthCheck({
-      id: updated.id, company_id: updated.company_id,
-      stream_type: updated.stream_type, live_stream_url: updated.live_stream_url,
-      connection_mode: updated.connection_mode, parent_camera_id: updated.parent_camera_id,
-      nvr_host: updated.nvr_host, stream_port: updated.stream_port,
-      cloud_device_id: updated.cloud_device_id,
-    }, undefined)
-
-    setOnvifDiscovery(flow.discovery ?? null)
-    setProvisionWarning(flow.error_reason ? `${t('cameras.provisioning.failed')}: ${flow.error_reason}` : null)
-    void refreshCloudAccountStatuses()
   }
 
   async function handleCreate() {
@@ -457,17 +562,26 @@ export function AdminCamerasPage() {
                     </td>
                     <td className="cm-td">
                       <div className="cm-health">
-                        <span className={`cm-health-badge cm-health-badge--${healthBadgeClass(healthByCameraId.get(camera.id)?.status ?? 'unknown')}`}>
-                          <span className="cm-health-dot" />
-                          {t(`cameras.health.status.${healthByCameraId.get(camera.id)?.status ?? 'unknown'}`)}
-                        </span>
-                        <span className="cm-health-lastseen">
-                          {t('cameras.health.lastSeen')}: {
-                            healthByCameraId.get(camera.id)?.last_online_at
-                              ? formatHealthTimestamp(healthByCameraId.get(camera.id)!.last_online_at!)
-                              : t('cameras.health.never')
-                          }
-                        </span>
+                        {provisioningCameraIds.has(camera.id) ? (
+                          <span className="cm-health-badge cm-health-badge--unknown">
+                            <span className="cm-health-dot" />
+                            Provisioning…
+                          </span>
+                        ) : (
+                          <>
+                            <span className={`cm-health-badge cm-health-badge--${healthBadgeClass(healthByCameraId.get(camera.id)?.status ?? 'unknown')}`}>
+                              <span className="cm-health-dot" />
+                              {t(`cameras.health.status.${healthByCameraId.get(camera.id)?.status ?? 'unknown'}`)}
+                            </span>
+                            <span className="cm-health-lastseen">
+                              {t('cameras.health.lastSeen')}: {
+                                healthByCameraId.get(camera.id)?.last_online_at
+                                  ? formatHealthTimestamp(healthByCameraId.get(camera.id)!.last_online_at!)
+                                  : t('cameras.health.never')
+                              }
+                            </span>
+                          </>
+                        )}
                       </div>
                     </td>
                     <td className="cm-td cm-td--right">

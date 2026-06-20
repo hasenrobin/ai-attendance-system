@@ -9,6 +9,41 @@ import { validateCloudDevice } from './cameraCloudService'
 
 export type FlowResult = 'ok' | 'failed' | 'skipped' | 'not_applicable'
 
+// ── Phase 3E: Agent-based provisioning helpers ────────────────────────────────
+
+// Modes that require a Local Customer Agent for provisioning.
+// direct_hls / direct_mjpeg are browser-reachable and do not need an agent.
+export const AGENT_PROVISIONABLE_MODES: ReadonlySet<CameraConnectionMode> = new Set([
+  'direct_rtsp', 'onvif', 'nvr_dvr',
+])
+
+export function needsAgentProvisioning(mode: CameraConnectionMode | null): boolean {
+  return mode !== null && AGENT_PROVISIONABLE_MODES.has(mode)
+}
+
+export type ProvisionJobType = {
+  jobType: 'provision' | 'validate_nvr'
+  provisionMode: 'direct_rtsp' | 'onvif' | 'nvr_channel' | null
+}
+
+// Returns the job_type + provision_mode for camera_provision_jobs.
+// isNvrChannel: true when the camera is an NVR channel (has a parent NVR).
+export function resolveProvisionJobType(
+  mode: CameraConnectionMode,
+  isNvrChannel: boolean,
+): ProvisionJobType {
+  switch (mode) {
+    case 'direct_rtsp': return { jobType: 'provision', provisionMode: 'direct_rtsp' }
+    case 'onvif':       return { jobType: 'provision', provisionMode: 'onvif' }
+    case 'nvr_dvr':
+      return isNvrChannel
+        ? { jobType: 'provision',    provisionMode: 'nvr_channel' }
+        : { jobType: 'validate_nvr', provisionMode: null }
+    default:
+      return { jobType: 'provision', provisionMode: 'direct_rtsp' }
+  }
+}
+
 // Ephemeral, Save-time-only summary of ONVIF profile discovery. Never
 // persisted to the DB -- re-discovered on every Save.
 export type OnvifDiscoveryInfo = {
