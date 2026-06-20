@@ -302,12 +302,11 @@ begin
     mbConfirmation, MB_YESNO) = IDYES;
 end;
 
-; ── [UninstallRun] ────────────────────────────────────────────────────────────
-;
-; These run BEFORE {app} files are deleted, so nssm.exe is still available.
-; Errors are silently ignored (e.g. service already removed manually).
+// End of [Code] section.
 
 [UninstallRun]
+; These run BEFORE {app} files are deleted, so nssm.exe is still available.
+; Errors are silently ignored (e.g. service already removed manually).
 Filename: "{app}\bin\nssm.exe"; \
   Parameters: "stop {#ServiceName}"; \
   RunOnceId: "StopAgent"; Flags: runhidden
