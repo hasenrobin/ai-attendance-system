@@ -294,12 +294,10 @@ end;
 function InitializeUninstall(): Boolean;
 begin
   Result := MsgBox(
-    'This will stop and remove the AttendanceAI Local Agent service.' + #13#10 +
-    #13#10 +
+    'This will stop and remove the AttendanceAI Local Agent service.' + #13#10 + #13#10 +
     'The following will be preserved (not deleted):' + #13#10 +
-    '  • C:\ProgramData\AttendanceAI\Agent\identity.json' + #13#10 +
-    '  • C:\ProgramData\AttendanceAI\Agent\logs\' + #13#10 +
-    #13#10 +
+    '  C:\ProgramData\AttendanceAI\Agent\identity.json' + #13#10 +
+    '  C:\ProgramData\AttendanceAI\Agent\logs\' + #13#10 + #13#10 +
     'Re-installing later will not require re-pairing.',
     mbConfirmation, MB_YESNO) = IDYES;
 end;
