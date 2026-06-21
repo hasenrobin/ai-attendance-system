@@ -94,7 +94,7 @@ export const MEDIAMTX_RTSP_BASE = optional('MEDIAMTX_RTSP_BASE', 'rtsp://localho
 // In cloud mode the pipeline skips the local MediaMTX API and YAML (cloud accepts
 // all publishers via all_others: {}) and always spawns ffmpeg even for H.264
 // cameras because the cloud server cannot pull private-IP RTSP streams.
-export const CLOUD_RTSP_MODE = !/^rtsp:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//i.test(MEDIAMTX_RTSP_BASE)
+export const CLOUD_RTSP_MODE = !/(localhost|127\.0\.0\.1)/i.test(MEDIAMTX_RTSP_BASE)
 export const MEDIAMTX_AUTO_START = optional('MEDIAMTX_AUTO_START', 'true') !== 'false'
 export const MEDIAMTX_EXECUTABLE = optional(
   'MEDIAMTX_EXECUTABLE',
