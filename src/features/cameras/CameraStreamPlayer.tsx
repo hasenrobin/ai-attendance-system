@@ -189,14 +189,18 @@ function MixedContentWarning({ url, onStatus }: SubPlayerProps) {
 }
 
 function HlsPlayer({ url, onStatus }: SubPlayerProps) {
-  // Block HLS.js before it even starts when Mixed Content would prevent it.
-  if (isMixedContent(url)) {
-    return <MixedContentWarning url={url} onStatus={onStatus} />
-  }
-
+  // Hooks must always be called unconditionally (Rules of Hooks).
   const videoRef = useRef<HTMLVideoElement>(null)
+  const mixed    = isMixedContent(url)
 
   useEffect(() => {
+    // Mixed Content: browser on HTTPS cannot load HTTP stream.
+    // Report offline and let the MixedContentWarning below handle the UI.
+    if (mixed) {
+      onStatus('offline')
+      return
+    }
+
     const video = videoRef.current
     if (!video) return
 
@@ -208,14 +212,14 @@ function HlsPlayer({ url, onStatus }: SubPlayerProps) {
       video.src = url
 
       const handlePlaying = () => onStatus('online')
-      const handleError = () => onStatus('offline')
+      const handleError   = () => onStatus('offline')
 
       video.addEventListener('playing', handlePlaying)
-      video.addEventListener('error', handleError)
+      video.addEventListener('error',   handleError)
 
       return () => {
         video.removeEventListener('playing', handlePlaying)
-        video.removeEventListener('error', handleError)
+        video.removeEventListener('error',   handleError)
         video.removeAttribute('src')
         video.load()
       }
@@ -248,7 +252,12 @@ function HlsPlayer({ url, onStatus }: SubPlayerProps) {
       hls?.destroy()
       hls = null
     }
-  }, [url, onStatus])
+  }, [url, onStatus, mixed])
+
+  // Conditional rendering after all hooks — Rules of Hooks satisfied.
+  if (mixed) {
+    return <MixedContentWarning url={url} onStatus={onStatus} />
+  }
 
   return (
     <video
