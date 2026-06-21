@@ -123,7 +123,77 @@ function ExternalVideoPlayer({ url, onStatus }: SubPlayerProps) {
   )
 }
 
+// Detects the Mixed Content scenario: HTTPS page trying to load an HTTP
+// stream URL. Browsers enforce Mixed Content policy and silently block the
+// fetch, causing HLS.js to emit a fatal NETWORK_ERROR with no user-visible
+// explanation. We intercept before HLS.js even starts and show a clear
+// message with the direct stream URL so the user can open it in VLC or a
+// native player.
+function isMixedContent(url: string): boolean {
+  return typeof window !== 'undefined'
+    && window.location.protocol === 'https:'
+    && url.startsWith('http://')
+}
+
+function MixedContentWarning({ url, onStatus }: SubPlayerProps) {
+  useEffect(() => { onStatus('offline') }, [onStatus])
+
+  function copyUrl() {
+    navigator.clipboard?.writeText(url).catch(() => undefined)
+  }
+
+  return (
+    <div className="clv-media clv-media--video" style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'center', textAlign: 'center', padding: '28px 24px', gap: 12,
+    }}>
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+        style={{ opacity: 0.45 }}>
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        <line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+      </svg>
+      <div style={{ fontWeight: 700, fontSize: 14 }}>البث محجوب بسياسة المتصفح</div>
+      <div style={{ opacity: 0.65, fontSize: 12, lineHeight: 1.65, maxWidth: 340 }}>
+        الموقع يعمل على HTTPS لكن رابط البث HTTP —
+        المتصفح يمنع تحميل موارد غير آمنة (Mixed Content).
+        افتح الرابط مباشرة في VLC أو مشغّل آخر.
+      </div>
+      <div style={{
+        background: 'rgba(255,255,255,0.06)', borderRadius: 6,
+        padding: '8px 12px', fontSize: 11, wordBreak: 'break-all',
+        color: 'var(--color-text-muted)', maxWidth: '100%',
+      }}>
+        {url}
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <a href={url} target="_blank" rel="noopener noreferrer"
+          style={{
+            padding: '6px 14px', borderRadius: 6, fontSize: 12,
+            background: 'var(--color-gold)', color: '#000', fontWeight: 600,
+            textDecoration: 'none', display: 'inline-block',
+          }}>
+          فتح في تبويب جديد
+        </a>
+        <button onClick={copyUrl}
+          style={{
+            padding: '6px 14px', borderRadius: 6, fontSize: 12,
+            background: 'rgba(255,255,255,0.1)', color: 'var(--color-text-primary)',
+            border: 'none', cursor: 'pointer',
+          }}>
+          نسخ الرابط
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function HlsPlayer({ url, onStatus }: SubPlayerProps) {
+  // Block HLS.js before it even starts when Mixed Content would prevent it.
+  if (isMixedContent(url)) {
+    return <MixedContentWarning url={url} onStatus={onStatus} />
+  }
+
   const videoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
