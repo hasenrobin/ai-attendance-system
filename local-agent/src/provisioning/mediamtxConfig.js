@@ -57,20 +57,33 @@ async function apiFetch(url, options = {}) {
 
 // Applies a path config to the running MediaMTX instance for immediate
 // effect. This does NOT persist to mediamtx.yml — see persistToYaml.
+//
+// Strategy: try add first; fall back to replace when the path already exists.
+// This is one fewer round-trip than GET→add/replace and avoids the race
+// condition where a GET returns 404 but the path is added concurrently before
+// the add call arrives.
 export async function applyViaApi(pathName, cfg) {
-  const getResp = await apiFetch(`${MEDIAMTX_API_BASE}/v3/config/paths/get/${pathName}`)
-  const exists = getResp.status === 200
+  const body = JSON.stringify(cfg)
+  const headers = { 'Content-Type': 'application/json' }
 
-  const action = exists ? 'replace' : 'add'
-  const resp = await apiFetch(`${MEDIAMTX_API_BASE}/v3/config/paths/${action}/${pathName}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(cfg),
+  let resp = await apiFetch(`${MEDIAMTX_API_BASE}/v3/config/paths/add/${pathName}`, {
+    method: 'POST', headers, body,
   })
 
   if (!resp.ok) {
-    const body = await resp.text().catch(() => '')
-    throw new MediaMtxApiError(`MediaMTX API rejected the path config (${resp.status}): ${body || resp.statusText}`)
+    const addBody = await resp.text().catch(() => '')
+    if (resp.status === 400 && addBody.includes('already exists')) {
+      // Path was added in a previous provision call during this MediaMTX session
+      resp = await apiFetch(`${MEDIAMTX_API_BASE}/v3/config/paths/replace/${pathName}`, {
+        method: 'POST', headers, body,
+      })
+      if (!resp.ok) {
+        const repBody = await resp.text().catch(() => '')
+        throw new MediaMtxApiError(`MediaMTX replace failed (${resp.status}): ${repBody || resp.statusText}`)
+      }
+    } else {
+      throw new MediaMtxApiError(`MediaMTX add failed (${resp.status}): ${addBody || resp.statusText}`)
+    }
   }
 }
 
