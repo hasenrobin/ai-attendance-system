@@ -19,6 +19,11 @@ srt: no
 api: yes
 apiAddress: '127.0.0.1:9997'
 
+# Disable auth so HLS child playlists and segments are readable without
+# credentials. The API is already restricted to localhost (127.0.0.1:9997)
+# so there is no external API exposure. RTSP/HLS operate on a trusted LAN.
+authMethod: no
+
 # Allow ALL paths (dynamic publisher + re-stream).
 # Provisioning-agent adds per-camera paths via the API; this wildcard ensures
 # any RTSP publisher or source can be accepted without pre-configuration.
