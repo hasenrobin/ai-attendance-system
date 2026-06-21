@@ -1,5 +1,6 @@
 import {
   ALLOWED_ORIGINS,
+  CLOUD_RTSP_MODE,
   FFPROBE_PATH,
   FFPROBE_TIMEOUT_MS,
   HLS_VERIFY_INTERVAL_MS,
@@ -23,6 +24,7 @@ import {
 
 export {
   ALLOWED_ORIGINS,
+  CLOUD_RTSP_MODE,
   FFPROBE_PATH,
   FFPROBE_TIMEOUT_MS,
   HLS_VERIFY_INTERVAL_MS,
@@ -44,6 +46,19 @@ export const AGENT_HOST = PROVISIONING_API_HOST
 export const AGENT_PORT = PROVISIONING_API_PORT
 export const FFMPEG_PATH = LOCAL_FFMPEG_PATH
 export const MEDIAMTX_HLS_PUBLIC_URL = MEDIAMTX_HLS_PUBLIC_URL_LOCAL
+
+// Passthrough: copy H.264 stream to the publish RTSP URL without re-encoding.
+// Used in cloud mode for cameras already in H.264 so no CPU is wasted on transcode.
+export function buildPassthroughArgs(sourceRtspUrl, outputRtspUrl) {
+  return [
+    '-rtsp_transport', 'tcp',
+    '-i', sourceRtspUrl,
+    '-c', 'copy',
+    '-f', 'rtsp',
+    '-rtsp_transport', 'tcp',
+    outputRtspUrl,
+  ]
+}
 
 export function buildTranscodeArgs(sourceRtspUrl, outputRtspUrl) {
   return [

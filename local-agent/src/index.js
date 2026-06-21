@@ -19,8 +19,10 @@ import { startJobPoller } from './jobPoller.js'
 import {
   AGENT_NAME,
   AGENT_PAIRING_CODE,
+  CLOUD_RTSP_MODE,
   LOCAL_FFMPEG_PATH,
   MEDIAMTX_HLS_PUBLIC_URL_LOCAL,
+  MEDIAMTX_RTSP_BASE,
   PROVISIONING_API_HOST,
   PROVISIONING_API_PORT,
 } from './config.js'
@@ -66,8 +68,10 @@ console.log(' AI Attendance - Local Customer Agent v1.0.0')
 console.log(`  Name:             ${AGENT_NAME}`)
 console.log(`  Identity file:    ${identityPath()}`)
 console.log(`  Provisioning API: http://${PROVISIONING_API_HOST}:${PROVISIONING_API_PORT}`)
-console.log(`  Local HLS URL:    ${MEDIAMTX_HLS_PUBLIC_URL_LOCAL}`)
+console.log(`  HLS public URL:   ${MEDIAMTX_HLS_PUBLIC_URL_LOCAL}`)
 console.log(`  ffmpeg path:      ${LOCAL_FFMPEG_PATH}`)
+console.log(`  RTSP publish →    ${MEDIAMTX_RTSP_BASE}`)
+console.log(`  Cloud mode:       ${CLOUD_RTSP_MODE ? 'YES — publishing to cloud MediaMTX' : 'NO  — publishing to local MediaMTX'}`)
 console.log('============================================================')
 
 let identity = loadIdentity()

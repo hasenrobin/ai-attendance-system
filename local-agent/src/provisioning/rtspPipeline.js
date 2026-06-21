@@ -6,9 +6,11 @@ import {
 } from './mediamtxConfig.js'
 import { redact } from './rtspUrl.js'
 import {
+  CLOUD_RTSP_MODE,
   FFMPEG_PATH,
   MEDIAMTX_RTSP_BASE,
   buildTranscodeArgs,
+  buildPassthroughArgs,
 } from './config.js'
 
 export const AUDIO_OK_CODECS = new Set(['aac', 'mp3'])
@@ -25,21 +27,19 @@ export function redactedErrorMessage(err, rtspUrlWithCreds) {
   return message.split(rtspUrlWithCreds).join(redact(rtspUrlWithCreds))
 }
 
-// ── Transcode process manager ──────────────────────────────────────────────────
+// ── Transcode / passthrough process manager ────────────────────────────────────
 //
-// MediaMTX's runOnInit hook is only triggered for paths defined in mediamtx.yml
-// at startup — NOT for paths created dynamically via the v3 API. For cameras
-// that require transcoding (HEVC → H.264, pcm_mulaw → AAC, etc.) the agent must
-// spawn ffmpeg itself and keep it alive for the current session.
+// LOCAL mode:  MediaMTX's runOnInit hook only fires for YAML-defined paths, not
+//              API-created ones. The agent spawns ffmpeg itself and keeps it alive.
 //
-// After provisioning the YAML path entry (with runOnInit) ensures ffmpeg restarts
-// automatically after a MediaMTX/agent restart. During the current session the
-// spawned process here provides the live stream.
+// CLOUD mode:  Cloud MediaMTX (all_others: {}) accepts any RTSP publisher, so no
+//              local API call is needed. ffmpeg is ALWAYS spawned — even for H.264
+//              cameras — because the cloud server cannot pull private-IP RTSP.
+//              Passthrough (-c copy) is used for H.264; full transcode for HEVC.
 
 const _transcodeProcs = new Map() // pathName → ChildProcess
 
-function spawnTranscodeProcess(rtspUrlWithCreds, pathName) {
-  // Kill previous transcoder for this path (e.g. re-provision of same camera)
+function spawnFfmpegProcess(rtspUrlWithCreds, pathName, useTranscode) {
   const prev = _transcodeProcs.get(pathName)
   if (prev) {
     try { prev.kill('SIGTERM') } catch {}
@@ -48,10 +48,14 @@ function spawnTranscodeProcess(rtspUrlWithCreds, pathName) {
   }
 
   const publishUrl = `${MEDIAMTX_RTSP_BASE}/${pathName}`
-  const args       = buildTranscodeArgs(rtspUrlWithCreds, publishUrl)
+  const args = useTranscode
+    ? buildTranscodeArgs(rtspUrlWithCreds, publishUrl)
+    : buildPassthroughArgs(rtspUrlWithCreds, publishUrl)
 
-  console.log(`[pipeline] Spawning ffmpeg: ${FFMPEG_PATH}`)
-  console.log(`[pipeline] ffmpeg publish → ${publishUrl}`)
+  const mode = useTranscode ? 'transcode (HEVC→H.264/AAC)' : 'passthrough (-c copy)'
+  console.log(`[pipeline] Spawning ffmpeg  mode=${mode}`)
+  console.log(`[pipeline] ffmpeg binary   : ${FFMPEG_PATH}`)
+  console.log(`[pipeline] ffmpeg publish  → ${publishUrl}`)
 
   const child = spawn(FFMPEG_PATH, args, {
     windowsHide: true,
@@ -63,10 +67,9 @@ function spawnTranscodeProcess(rtspUrlWithCreds, pathName) {
     const text = chunk.toString()
     errBuf = (errBuf + text).slice(-2000)
     for (const line of text.split('\n')) {
-      const trimmed = line.trim()
-      // Log everything except per-frame progress lines (frame=N fps=...)
-      if (trimmed && !trimmed.startsWith('frame=')) {
-        console.log(`[ffmpeg:${pathName.slice(-8)}] ${trimmed.slice(0, 120)}`)
+      const t = line.trim()
+      if (t && !t.startsWith('frame=')) {
+        console.log(`[ffmpeg:${pathName.slice(-8)}] ${t.slice(0, 120)}`)
       }
     }
   })
@@ -87,16 +90,20 @@ function spawnTranscodeProcess(rtspUrlWithCreds, pathName) {
   })
 
   _transcodeProcs.set(pathName, child)
-  return child
 }
 
-// Shared ffprobe → MediaMTX → HLS pipeline.
+// Shared ffprobe → ffmpeg → MediaMTX → HLS pipeline.
 // Never throws — returns { ok: true, ... } or { ok: false, stage, error, ... }.
 export async function runRtspPipeline({ cameraId, rtspUrlWithCreds }) {
   const pathName = pathNameFor(cameraId)
   const warnings = []
 
-  console.log(`[pipeline] cameraId=${cameraId} pathName=${pathName} url=${redact(rtspUrlWithCreds ?? 'null')}`)
+  console.log(`[pipeline] ── NEW PROVISION ──────────────────────────────────────`)
+  console.log(`[pipeline] cameraId   = ${cameraId}`)
+  console.log(`[pipeline] pathName   = ${pathName}`)
+  console.log(`[pipeline] url        = ${redact(rtspUrlWithCreds ?? 'null')}`)
+  console.log(`[pipeline] cloudMode  = ${CLOUD_RTSP_MODE}`)
+  console.log(`[pipeline] rtspTarget = ${MEDIAMTX_RTSP_BASE}`)
 
   if (!rtspUrlWithCreds) {
     const err = 'RTSP URL is null or empty — camera.rtsp_url was not set in the database'
@@ -104,7 +111,7 @@ export async function runRtspPipeline({ cameraId, rtspUrlWithCreds }) {
     return { ok: false, stage: 'request', error: err, warnings }
   }
 
-  // ── Stage 1: ffprobe ────────────────────────────────────────────────────────
+  // ── Stage 1: ffprobe ──────────────────────────────────────────────────────────
   console.log('[pipeline] Stage 1/3: ffprobe')
   let probe
   try {
@@ -118,49 +125,65 @@ export async function runRtspPipeline({ cameraId, rtspUrlWithCreds }) {
   const transcode = decideTranscode(probe)
   console.log(`[pipeline] ffprobe OK. videoCodec=${probe.videoCodec} audioCodec=${probe.audioCodec} transcode=${transcode}`)
 
-  // ── Stage 2: MediaMTX API ───────────────────────────────────────────────────
+  // ── Stage 2: MediaMTX API + YAML (LOCAL mode only) ───────────────────────────
   //
-  // For passthrough (H.264 + AAC/MP3): set source URL directly — MediaMTX pulls
-  // from the camera and serves HLS without any helper process.
+  // CLOUD mode: skip entirely. Cloud MediaMTX accepts any RTSP publisher via
+  // all_others: {} — no API call or YAML write needed. Logging the publish
+  // target here makes the exact ffmpeg destination visible in agent.log.
   //
-  // For transcode (HEVC, pcm_mulaw, etc.): configure the path to accept a
-  // publisher ({}) and spawn ffmpeg ourselves. MediaMTX's runOnInit hook is only
-  // executed for YAML-defined paths — NOT for paths created via the runtime API.
-  // The spawned ffmpeg process stays alive for this session; after a restart
-  // mediamtx.yml (written below) carries runOnInit so MediaMTX auto-starts it.
-  const apiCfg = transcode
-    ? {}  // accepts an RTSP publisher — ffmpeg will push to MEDIAMTX_RTSP_BASE/pathName
-    : buildPathConfig({ rtspUrlWithCreds, pathName, transcode: false })
+  // LOCAL mode: configure the local MediaMTX path and persist to YAML so the
+  // path survives a MediaMTX restart (runOnInit fires from YAML at startup).
+  console.log(`[pipeline] Stage 2/3: MediaMTX  cloud=${CLOUD_RTSP_MODE} transcode=${transcode}`)
 
-  console.log(`[pipeline] Stage 2/3: MediaMTX API  transcode=${transcode} pathName=${pathName}`)
-  try {
-    await applyViaApi(pathName, apiCfg)
-    console.log('[pipeline] MediaMTX API OK.')
-  } catch (err) {
-    const msg = redactedErrorMessage(err, rtspUrlWithCreds)
-    console.error(`[pipeline] FAIL stage=mediamtx_api : ${msg}`)
-    return { ok: false, stage: 'mediamtx_api', error: msg, rtspUrlWithCreds, warnings }
+  if (CLOUD_RTSP_MODE) {
+    console.log(`[pipeline] CLOUD MODE — local MediaMTX API + YAML skipped`)
+    console.log(`[pipeline] ffmpeg will publish to: ${MEDIAMTX_RTSP_BASE}/${pathName}`)
+  } else {
+    // Local mode: configure the path in local MediaMTX
+    const apiCfg = transcode
+      ? {}  // publish-only slot; ffmpeg will push to local RTSP
+      : buildPathConfig({ rtspUrlWithCreds, pathName, transcode: false })
+
+    try {
+      await applyViaApi(pathName, apiCfg)
+      console.log('[pipeline] MediaMTX API OK.')
+    } catch (err) {
+      const msg = redactedErrorMessage(err, rtspUrlWithCreds)
+      console.error(`[pipeline] FAIL stage=mediamtx_api : ${msg}`)
+      return { ok: false, stage: 'mediamtx_api', error: msg, rtspUrlWithCreds, warnings }
+    }
+
+    // Persist to YAML for runOnInit survival across MediaMTX restarts
+    try {
+      const yamlCfg = buildPathConfig({ rtspUrlWithCreds, pathName, transcode })
+      await persistToYaml(pathName, yamlCfg)
+      console.log('[pipeline] mediamtx.yml updated.')
+    } catch (err) {
+      const w = `Could not persist path to mediamtx.yml (will not survive a proxy restart): ${err.message}`
+      console.warn(`[pipeline] WARNING: ${w}`)
+      warnings.push(w)
+    }
   }
 
-  // Persist to mediamtx.yml so runOnInit executes after a MediaMTX restart.
-  try {
-    const yamlCfg = buildPathConfig({ rtspUrlWithCreds, pathName, transcode })
-    await persistToYaml(pathName, yamlCfg)
-    console.log('[pipeline] mediamtx.yml updated.')
-  } catch (err) {
-    const w = `Could not persist path to mediamtx.yml (will not survive a proxy restart): ${err.message}`
-    console.warn(`[pipeline] WARNING: ${w}`)
-    warnings.push(w)
+  // ── Spawn ffmpeg ──────────────────────────────────────────────────────────────
+  //
+  // LOCAL mode: only when transcode is needed (HEVC/pcm_mulaw); H.264 passthrough
+  //             uses MediaMTX source-pull which needs no helper process.
+  //
+  // CLOUD mode: always, for every camera, because:
+  //   - Cloud MediaMTX cannot reach cameras on private LAN IPs
+  //   - ffmpeg reads locally and publishes to cloud RTSP
+  //   - H.264 cameras use -c copy (no CPU overhead); HEVC uses libx264 transcode
+  const needsFfmpegPush = transcode || CLOUD_RTSP_MODE
+
+  if (needsFfmpegPush) {
+    const waitMs = CLOUD_RTSP_MODE ? 5000 : 3000
+    spawnFfmpegProcess(rtspUrlWithCreds, pathName, transcode)
+    console.log(`[pipeline] Waiting ${waitMs}ms for ffmpeg to connect and produce first frames...`)
+    await new Promise(r => setTimeout(r, waitMs))
   }
 
-  // For transcode: spawn ffmpeg now so the stream is live in this session.
-  // Give ffmpeg 3 s to connect to the camera and begin publishing to MediaMTX.
-  if (transcode) {
-    spawnTranscodeProcess(rtspUrlWithCreds, pathName)
-    await new Promise(r => setTimeout(r, 3000))
-  }
-
-  // ── Stage 3: HLS verification ───────────────────────────────────────────────
+  // ── Stage 3: HLS verification ─────────────────────────────────────────────────
   console.log('[pipeline] Stage 3/3: HLS verify')
   let liveStreamUrl
   try {
@@ -171,7 +194,7 @@ export async function runRtspPipeline({ cameraId, rtspUrlWithCreds }) {
     return { ok: false, stage: 'hls_verify', error: err.message, rtspUrlWithCreds, warnings }
   }
 
-  console.log(`[pipeline] ALL STAGES PASSED. streamType=hls transcoded=${transcode}`)
+  console.log(`[pipeline] ALL STAGES PASSED. streamType=hls transcoded=${transcode} cloud=${CLOUD_RTSP_MODE}`)
   return {
     ok:           true,
     stage:        'done',
