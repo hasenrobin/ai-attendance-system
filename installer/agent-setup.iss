@@ -18,7 +18,7 @@
   #define NodeVersion "20.18.0"
 #endif
 #define AppName    "AttendanceAI Local Agent"
-#define AppVersion "1.0.0"
+#define AppVersion "1.0.1"
 #define AppPublisher "AttendanceAI"
 #define ServiceName  "AttendanceAIAgent"
 
@@ -114,7 +114,8 @@ begin
   Result := True;
   if CurPageID = PairingPage.ID then
   begin
-    if Trim(PairingPage.Values[0]) = '' then
+    if (Trim(PairingPage.Values[0]) = '') and
+       (not FileExists(ExpandConstant('{commonappdata}') + '\AttendanceAI\Agent\identity.json')) then
     begin
       MsgBox(
         'Please enter a Pairing Code.' + #13#10 +
@@ -161,7 +162,10 @@ begin
     'FFMPEG_PATH='         + AppDir + '\bin\ffmpeg.exe' + #13#10 +
     'FFPROBE_PATH='        + AppDir + '\bin\ffprobe.exe' + #13#10 +
     'MEDIAMTX_AUTO_START=true' + #13#10 +
-    'MEDIAMTX_HLS_PUBLIC_URL=http://localhost:8888' + #13#10 +
+    'MEDIAMTX_RTSP_BASE=rtsp://91.98.80.25:8554' + #13#10 +
+    'MEDIAMTX_HLS_PUBLIC_URL=https://attendanceai.duckdns.org/camera-hls' + #13#10 +
+    'MEDIAMTX_RTSP_PUBLISH_URL=rtsp://91.98.80.25:8554' + #13#10 +
+    'ENABLE_CLOUD_STREAM_MANAGER=false' + #13#10 +
     '' + #13#10 +
     '# Identity file stored in ProgramData so it survives reinstalls' + #13#10 +
     'ATTENDANCEAI_IDENTITY_DIR=' + DataDir + #13#10;
