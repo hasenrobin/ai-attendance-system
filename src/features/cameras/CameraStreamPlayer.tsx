@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import Hls from 'hls.js'
 import './cameraLiveView.css'
 
 export type StreamPlayerStatus = 'connecting' | 'online' | 'offline' | 'error'
@@ -12,6 +13,7 @@ type CameraStreamPlayerProps = {
 }
 
 const EMBEDDABLE_URL_EXTENSIONS = /\.(mp4|webm|ogg|m3u8|mov)(\?.*)?$/i
+const HLS_URL_EXTENSION = /\.m3u8(\?.*)?$/i
 
 function getUrlScheme(url: string): string | null {
   const match = url.trim().match(/^([a-z][a-z0-9+.-]*):\/\//i)
@@ -47,6 +49,23 @@ function UnsupportedStreamMessage({ onStatus }: { onStatus: (status: StreamPlaye
   )
 }
 
+function UnsupportedHlsMessage({ onStatus }: { onStatus: (status: StreamPlayerStatus) => void }) {
+  useEffect(() => {
+    onStatus('error')
+  }, [onStatus])
+
+  return (
+    <div className="clv-media clv-media--video" style={{ display: 'grid', placeItems: 'center', textAlign: 'center', padding: 24 }}>
+      <div>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>HLS playback is not supported in this browser</div>
+        <div style={{ opacity: 0.75, lineHeight: 1.7 }}>
+          This browser cannot play the camera HLS stream. Try a modern Chrome, Edge, Safari, or Firefox browser.
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export async function classifyExternalUrl(url: string): Promise<boolean> {
   if (!isHttpUrl(url)) return false
   if (EMBEDDABLE_URL_EXTENSIONS.test(url)) return true
@@ -65,12 +84,12 @@ export function CameraStreamPlayer({ streamType, liveStreamUrl, onStatus }: Came
     return <UnsupportedStreamMessage onStatus={onStatus} />
   }
 
-  if (streamType === 'mjpeg') {
-    return <MjpegPlayer url={liveStreamUrl} onStatus={onStatus} />
+  if (streamType === 'hls' || HLS_URL_EXTENSION.test(liveStreamUrl)) {
+    return <HlsPlayer url={liveStreamUrl} onStatus={onStatus} />
   }
 
-  if (streamType === 'hls') {
-    return <HlsPlayer url={liveStreamUrl} onStatus={onStatus} />
+  if (streamType === 'mjpeg') {
+    return <MjpegPlayer url={liveStreamUrl} onStatus={onStatus} />
   }
 
   return <ExternalVideoPlayer url={liveStreamUrl} onStatus={onStatus} />
@@ -192,8 +211,11 @@ function HlsPlayer({ url, onStatus }: SubPlayerProps) {
   // Hooks must always be called unconditionally (Rules of Hooks).
   const videoRef = useRef<HTMLVideoElement>(null)
   const mixed    = isMixedContent(url)
+  const [unsupported, setUnsupported] = useState(false)
 
   useEffect(() => {
+    setUnsupported(false)
+
     // Mixed Content: browser on HTTPS cannot load HTTP stream.
     // Report offline and let the MixedContentWarning below handle the UI.
     if (mixed) {
@@ -205,10 +227,23 @@ function HlsPlayer({ url, onStatus }: SubPlayerProps) {
     if (!video) return
 
     onStatus('connecting')
-    let cancelled = false
-    let hls: InstanceType<typeof import('hls.js').default> | null = null
+    let hls: Hls | null = null
 
-    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    if (Hls.isSupported()) {
+      hls = new Hls()
+      hls.loadSource(url)
+      hls.attachMedia(video)
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        void video.play().catch(() => undefined)
+        onStatus('online')
+      })
+
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (!data.fatal) return
+        onStatus(data.type === Hls.ErrorTypes.NETWORK_ERROR ? 'offline' : 'error')
+      })
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = url
 
       const handlePlaying = () => onStatus('online')
@@ -223,40 +258,26 @@ function HlsPlayer({ url, onStatus }: SubPlayerProps) {
         video.removeAttribute('src')
         video.load()
       }
+    } else {
+      setUnsupported(true)
+      onStatus('error')
     }
 
-    import('hls.js').then(({ default: Hls }) => {
-      if (cancelled) return
-
-      if (!Hls.isSupported()) {
-        onStatus('error')
-        return
-      }
-
-      const instance = new Hls()
-      hls = instance
-
-      instance.loadSource(url)
-      instance.attachMedia(video)
-
-      instance.on(Hls.Events.MANIFEST_PARSED, () => onStatus('online'))
-
-      instance.on(Hls.Events.ERROR, (_event, data) => {
-        if (!data.fatal) return
-        onStatus(data.type === Hls.ErrorTypes.NETWORK_ERROR ? 'offline' : 'error')
-      })
-    })
-
     return () => {
-      cancelled = true
       hls?.destroy()
       hls = null
+      video.removeAttribute('src')
+      video.load()
     }
   }, [url, onStatus, mixed])
 
   // Conditional rendering after all hooks — Rules of Hooks satisfied.
   if (mixed) {
     return <MixedContentWarning url={url} onStatus={onStatus} />
+  }
+
+  if (unsupported) {
+    return <UnsupportedHlsMessage onStatus={onStatus} />
   }
 
   return (
