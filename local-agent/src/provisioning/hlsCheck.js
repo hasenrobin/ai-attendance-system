@@ -1,4 +1,10 @@
-import { HLS_VERIFY_INTERVAL_MS, HLS_VERIFY_TIMEOUT_MS, MEDIAMTX_HLS_BASE, MEDIAMTX_HLS_PUBLIC_URL } from './config.js'
+import {
+  CLOUD_RTSP_MODE,
+  HLS_VERIFY_INTERVAL_MS,
+  HLS_VERIFY_TIMEOUT_MS,
+  MEDIAMTX_HLS_BASE,
+  MEDIAMTX_HLS_PUBLIC_URL,
+} from './config.js'
 
 export class HlsVerifyError extends Error {
   constructor(message) {
@@ -35,16 +41,18 @@ export function liveStreamUrlFor(pathName) {
   return `${MEDIAMTX_HLS_PUBLIC_URL}/${pathName}/index.m3u8`
 }
 
-// Internal URL used only for server-side verification (always localhost:8888).
-function internalHlsUrl(pathName) {
+// URL used for verification. In local mode the agent can verify localhost.
+// In cloud mode localhost is the customer machine, so verify the public HLS URL.
+function verifyHlsUrlFor(pathName) {
+  if (CLOUD_RTSP_MODE) return liveStreamUrlFor(pathName)
   return `${MEDIAMTX_HLS_BASE}/${pathName}/index.m3u8`
 }
 
 // Polls the HLS manifest until MediaMTX (and, for transcoded paths, ffmpeg)
 // has produced a playable stream, or HLS_VERIFY_TIMEOUT_MS elapses.
-// Verification uses the internal URL; the returned URL is the public one.
+// Verification uses the local URL in local mode and the public URL in cloud mode.
 export async function waitForHls(pathName) {
-  const checkUrl  = internalHlsUrl(pathName)
+  const checkUrl  = verifyHlsUrlFor(pathName)
   const returnUrl = liveStreamUrlFor(pathName)
   const deadline = Date.now() + HLS_VERIFY_TIMEOUT_MS
 
