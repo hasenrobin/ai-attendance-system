@@ -294,11 +294,11 @@ export function AdminAgentsPage() {
                       <td className="cm-td cm-td--muted">{agent.active_token_count} active / {agent.token_count} total</td>
                       <td className="cm-td cm-td--right">
                         <div className="cm-actions">
-                          <LuxuryButton variant="ghost" onClick={() => openEdit(agent)} disabled={agent.status === 'revoked'}>Edit</LuxuryButton>
-                          {agent.status === 'disabled' ? (
+                          <LuxuryButton variant="ghost" onClick={() => openEdit(agent)} disabled={submitting}>Edit</LuxuryButton>
+                          {agent.status === 'disabled' || agent.status === 'revoked' ? (
                             <LuxuryButton variant="ghost" onClick={() => void changeStatus(agent, 'enable_agent')} disabled={submitting}>Enable</LuxuryButton>
                           ) : (
-                            <LuxuryButton variant="ghost" onClick={() => void changeStatus(agent, 'disable_agent')} disabled={submitting || agent.status === 'revoked'}>Disable</LuxuryButton>
+                            <LuxuryButton variant="ghost" onClick={() => void changeStatus(agent, 'disable_agent')} disabled={submitting}>Disable</LuxuryButton>
                           )}
                           <LuxuryButton variant="secondary" onClick={() => void changeStatus(agent, 'revoke_agent')} disabled={submitting || agent.status === 'revoked'}>Revoke</LuxuryButton>
                         </div>
