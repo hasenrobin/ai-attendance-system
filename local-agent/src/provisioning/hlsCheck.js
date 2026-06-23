@@ -48,6 +48,10 @@ function verifyHlsUrlFor(pathName) {
   return `${MEDIAMTX_HLS_BASE}/${pathName}/index.m3u8`
 }
 
+export async function isHlsReady(pathName) {
+  return checkOnce(verifyHlsUrlFor(pathName))
+}
+
 // Polls the HLS manifest until MediaMTX (and, for transcoded paths, ffmpeg)
 // has produced a playable stream, or HLS_VERIFY_TIMEOUT_MS elapses.
 // Verification uses the local URL in local mode and the public URL in cloud mode.

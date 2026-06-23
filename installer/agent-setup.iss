@@ -18,7 +18,7 @@
   #define NodeVersion "20.18.0"
 #endif
 #define AppName    "AttendanceAI Local Agent"
-#define AppVersion "1.0.2"
+#define AppVersion "1.0.3"
 #define AppPublisher "AttendanceAI"
 #define ServiceName  "AttendanceAIAgent"
 

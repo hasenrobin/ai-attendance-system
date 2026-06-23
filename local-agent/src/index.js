@@ -16,6 +16,7 @@ import { loadIdentity, identityPath } from './identity/identityStore.js'
 import { pairAgent } from './pairing/pairingClient.js'
 import { startHeartbeatService, stopHeartbeatService } from './service/heartbeatService.js'
 import { startJobPoller } from './jobPoller.js'
+import { startStreamSupervisor } from './provisioning/streamSupervisor.js'
 import {
   AGENT_NAME,
   AGENT_PAIRING_CODE,
@@ -64,7 +65,7 @@ process.on('SIGINT',  () => shutdown('SIGINT'))
 process.on('SIGTERM', () => shutdown('SIGTERM'))
 
 console.log('============================================================')
-console.log(' AI Attendance - Local Customer Agent v1.0.0')
+console.log(' AI Attendance - Local Customer Agent v1.0.3')
 console.log(`  Name:             ${AGENT_NAME}`)
 console.log(`  Identity file:    ${identityPath()}`)
 console.log(`  Provisioning API: http://${PROVISIONING_API_HOST}:${PROVISIONING_API_PORT}`)
@@ -104,6 +105,7 @@ if (!identity) {
 
   // ── 3. Watchdog: restart MediaMTX if it crashes later ─────────────────────
   startMediaMtxWatchdog(writeStartupLog)
+  startStreamSupervisor()
 
   // ── 4. Local provisioning HTTP API (port 8787, legacy browser→agent path) ──
   startProvisioningApi()

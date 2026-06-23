@@ -1,10 +1,11 @@
 import { spawn }      from 'node:child_process'
 import { probeStream } from './ffprobeService.js'
-import { waitForHls }  from './hlsCheck.js'
+import { liveStreamUrlFor, waitForHls }  from './hlsCheck.js'
 import {
   applyViaApi, buildPathConfig, persistToYaml, pathNameFor,
 } from './mediamtxConfig.js'
 import { redact } from './rtspUrl.js'
+import { registerManagedStream, unregisterManagedStream } from './streamSupervisor.js'
 import {
   CLOUD_RTSP_MODE,
   FFMPEG_PATH,
@@ -178,7 +179,14 @@ export async function runRtspPipeline({ cameraId, rtspUrlWithCreds }) {
 
   if (needsFfmpegPush) {
     const waitMs = CLOUD_RTSP_MODE ? 5000 : 3000
-    spawnFfmpegProcess(rtspUrlWithCreds, pathName, transcode)
+    registerManagedStream({
+      cameraId,
+      pathName,
+      rtspUrlWithCreds,
+      publishUrl: `${MEDIAMTX_RTSP_BASE}/${pathName}`,
+      hlsUrl: liveStreamUrlFor(pathName),
+      useTranscode: transcode,
+    })
     console.log(`[pipeline] Waiting ${waitMs}ms for ffmpeg to connect and produce first frames...`)
     await new Promise(r => setTimeout(r, waitMs))
   }
@@ -190,6 +198,7 @@ export async function runRtspPipeline({ cameraId, rtspUrlWithCreds }) {
     liveStreamUrl = await waitForHls(pathName)
     console.log(`[pipeline] HLS OK. liveStreamUrl=${liveStreamUrl}`)
   } catch (err) {
+    if (needsFfmpegPush) unregisterManagedStream(pathName, 'initial_hls_verify_failed')
     console.error(`[pipeline] FAIL stage=hls_verify : ${err.message}`)
     return { ok: false, stage: 'hls_verify', error: err.message, rtspUrlWithCreds, warnings }
   }

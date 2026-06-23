@@ -28,6 +28,10 @@ export function identityPath() {
   return IDENTITY_PATH
 }
 
+export function identityDir() {
+  return IDENTITY_DIR
+}
+
 export function loadIdentity() {
   if (!existsSync(IDENTITY_PATH)) return null
 
