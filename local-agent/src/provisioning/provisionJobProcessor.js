@@ -11,6 +11,7 @@ import { runRtspPipeline }           from './rtspPipeline.js'
 import { discoverOnvifStream, OnvifError } from './onvifService.js'
 import { resolveChannelRtspUrl }     from './nvrChannelUrl.js'
 import { checkNvrParentReachable }   from './nvrParentCheck.js'
+import { resolveRtspStreamUrl, logResolvedRtspUrl } from './rtspPathResolver.js'
 import { isMediaMtxReady }           from '../mediaMtxProcess.js'
 
 // Hard cap for the entire provision pipeline (ffprobe + MediaMTX + HLS verify).
@@ -35,16 +36,59 @@ function withTimeout(fn, ms) {
 async function runDirectRtsp(cameraId, camera) {
   // Log camera field presence so the exact failure path is visible in agent.log.
   console.log(`[provision:direct_rtsp] camera.rtsp_url     : ${camera.rtsp_url ? redact(camera.rtsp_url) : 'NULL'}`)
+  console.log(`[provision:direct_rtsp] camera.host         : ${camera.nvr_host ?? 'NULL'}`)
+  console.log(`[provision:direct_rtsp] camera.stream_port  : ${camera.stream_port ?? 'NULL'}`)
   console.log(`[provision:direct_rtsp] camera.username     : ${camera.username ? '***set***' : 'null'}`)
   console.log(`[provision:direct_rtsp] camera.password     : ${camera.password ? '***set***' : 'null'}`)
 
-  const rtspUrlWithCreds = buildRtspUrl({
-    rtspUrl:  camera.rtsp_url,
-    username: camera.username,
-    password: camera.password,
-  })
+  let rtspUrlWithCreds
+  let resolvedRtspUrl
+  let selectedRtspPath
+  let selectedStreamKind
+
+  if (camera.rtsp_url) {
+    rtspUrlWithCreds = buildRtspUrl({
+      rtspUrl:  camera.rtsp_url,
+      username: camera.username,
+      password: camera.password,
+    })
+    resolvedRtspUrl = camera.rtsp_url
+    console.log('[provision:direct_rtsp] using advanced manual RTSP URL')
+  } else {
+    console.log('[provision:direct_rtsp] no manual RTSP URL; auto-resolving stream path')
+    const resolved = await resolveRtspStreamUrl({
+      host:     camera.nvr_host,
+      port:     camera.stream_port ?? 554,
+      username: camera.username,
+      password: camera.password,
+    })
+
+    if (!resolved.ok) {
+      return {
+        ok: false,
+        stage: 'rtsp_path_probe',
+        error: resolved.error,
+        testedPaths: resolved.testedPaths ?? [],
+        warnings: [],
+      }
+    }
+
+    rtspUrlWithCreds   = resolved.rtspUrlWithCreds
+    resolvedRtspUrl    = resolved.resolvedRtspUrl
+    selectedRtspPath   = resolved.selectedPath
+    selectedStreamKind = resolved.streamKind
+    logResolvedRtspUrl(rtspUrlWithCreds)
+  }
+
   console.log(`[provision:direct_rtsp] rtspUrlWithCreds    : ${redact(rtspUrlWithCreds ?? 'null')}`)
-  return runRtspPipeline({ cameraId, rtspUrlWithCreds })
+  const result = await runRtspPipeline({ cameraId, rtspUrlWithCreds })
+
+  return {
+    ...result,
+    resolvedRtspUrl,
+    selectedRtspPath,
+    selectedStreamKind,
+  }
 }
 
 async function runOnvif(cameraId, camera) {

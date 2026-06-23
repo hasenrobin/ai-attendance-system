@@ -1075,6 +1075,7 @@ async function agentSubmitProvisionResult(
   if (nextStatus === 'completed' && result?.ok === true && typedJob.job_type === 'provision') {
     const liveStreamUrl = typeof result.liveStreamUrl === 'string' ? result.liveStreamUrl : null
     const streamType    = typeof result.streamType    === 'string' ? result.streamType    : null
+    const resolvedRtspUrl = typeof result.resolvedRtspUrl === 'string' ? result.resolvedRtspUrl : null
 
     if (liveStreamUrl) {
       await supabase
@@ -1082,6 +1083,7 @@ async function agentSubmitProvisionResult(
         .update({
           live_stream_url: liveStreamUrl,
           ...(streamType ? { stream_type: streamType } : {}),
+          ...(resolvedRtspUrl ? { rtsp_url: resolvedRtspUrl } : {}),
           updated_at: now,
         })
         .eq('id', typedJob.camera_id)

@@ -996,6 +996,9 @@ export const en = {
     connectionTitle: 'Connection (Optional)',
     connectionHint: 'For security, existing connection details are never displayed here. Leave fields blank to keep their current values unchanged.',
     rtspUrlLabel: 'RTSP URL',
+    rtspHostLabel: 'Camera IP address',
+    rtspAutoPathHint: 'Defaults to 554. The Agent will test common RTSP stream paths automatically.',
+    advancedManualRtsp: 'Advanced: enter full RTSP URL manually',
     onvifUrlLabel: 'ONVIF URL',
     usernameLabel: 'Username',
     passwordLabel: 'Password',
@@ -1223,6 +1226,10 @@ export const en = {
 
     provisioning: {
       failed: 'Auto-provisioning failed',
+      testingStreamPath: 'Testing stream path...',
+      mainStreamFound: 'Main stream found',
+      subStreamFound: 'Sub stream found',
+      couldNotFindRtspPath: 'Could not find RTSP stream path',
     },
 
     discovery: {

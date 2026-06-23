@@ -294,7 +294,7 @@ export function AdminCamerasPage() {
 
       // Mark camera as provisioning and start polling (fire and forget).
       setProvisioningCameraIds(prev => new Set(prev).add(camera.id))
-      setProvisionWarning(null)
+      setProvisionWarning(mode === 'direct_rtsp' ? t('cameras.provisioning.testingStreamPath') : null)
 
       pollProvisionJob(jobId, {
         onUpdate: (job) => {
@@ -307,6 +307,16 @@ export function AdminCamerasPage() {
           }
 
           if (job.status === 'completed' && job.result?.ok === true) {
+            if (job.provision_mode === 'direct_rtsp') {
+              const streamKind = typeof job.result.selectedStreamKind === 'string'
+                ? job.result.selectedStreamKind
+                : null
+              setProvisionWarning(
+                streamKind === 'sub'
+                  ? t('cameras.provisioning.subStreamFound')
+                  : t('cameras.provisioning.mainStreamFound')
+              )
+            }
             // agent-api already wrote live_stream_url + stream_type to cameras.
             void getCameraById(camera.id).then(({ data: refreshed }) => {
               if (refreshed) {
@@ -326,7 +336,9 @@ export function AdminCamerasPage() {
             void refreshCloudAccountStatuses()
           } else if (job.status === 'failed' || job.status === 'timeout') {
             setProvisionWarning(
-              `${t('cameras.provisioning.failed')}: ${job.error_message ?? 'Provision job did not complete.'}`
+              job.provision_mode === 'direct_rtsp' && job.result?.stage === 'rtsp_path_probe'
+                ? t('cameras.provisioning.couldNotFindRtspPath')
+                : `${t('cameras.provisioning.failed')}: ${job.error_message ?? 'Provision job did not complete.'}`
             )
           }
         },
@@ -483,6 +495,8 @@ export function AdminCamerasPage() {
       branch_id: branches[0]?.id ?? '',
       name: [prefill.manufacturer, prefill.model, prefill.ip].filter(Boolean).join(' — '),
       connection_mode: mode as CameraConnectionMode,
+      nvr_host: prefill.ip,
+      stream_port: '554',
       rtsp_url: prefill.rtsp_url ?? '',
       onvif_url: prefill.onvif_url ?? '',
     })

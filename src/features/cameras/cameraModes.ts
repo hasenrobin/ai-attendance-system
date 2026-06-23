@@ -114,7 +114,7 @@ export type ConnectionFields = {
 export function hasRequiredConnectionFields(mode: CameraConnectionMode, fields: ConnectionFields): boolean {
   switch (mode) {
     case 'direct_rtsp':
-      return fields.rtsp_url.trim() !== ''
+      return fields.nvr_host.trim() !== '' || fields.rtsp_url.trim() !== ''
     case 'direct_hls':
     case 'direct_mjpeg':
     case 'external_url':

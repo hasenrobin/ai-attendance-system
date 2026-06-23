@@ -362,7 +362,7 @@ export function CameraForm({
         </div>
       )}
 
-      {mode !== 'onvif' && mode !== 'nvr_dvr' && (
+      {mode !== 'direct_rtsp' && mode !== 'onvif' && mode !== 'nvr_dvr' && (
         <>
           <hr className="cm-section-divider" />
           <div>
@@ -398,8 +398,13 @@ function ConnectionMethodFields({ mode, form, setForm, nvrParents, excludeCamera
     case 'direct_rtsp':
       return (
         <div className="cm-form-grid">
-          <LuxuryInput label={t('cameras.rtspUrlLabel')} value={form.rtsp_url}
-            onChange={e => setForm(p => ({ ...p, rtsp_url: e.target.value }))} placeholder="rtsp://..." />
+          <LuxuryInput label={t('cameras.rtspHostLabel')} value={form.nvr_host}
+            onChange={e => setForm(p => ({ ...p, nvr_host: e.target.value }))} placeholder="192.168.1.15" />
+          <div>
+            <LuxuryInput label={t('cameras.portLabel')} value={form.stream_port}
+              onChange={e => setForm(p => ({ ...p, stream_port: e.target.value }))} placeholder="554" />
+            <div className="cm-field-hint">{t('cameras.rtspAutoPathHint')}</div>
+          </div>
           <LuxuryInput label={t('cameras.usernameLabel')} value={form.username}
             onChange={e => setForm(p => ({ ...p, username: e.target.value }))} />
           <div>
@@ -407,6 +412,13 @@ function ConnectionMethodFields({ mode, form, setForm, nvrParents, excludeCamera
               onChange={e => setForm(p => ({ ...p, password: e.target.value }))} />
             <div className="cm-field-hint">{t('cameras.passwordHint')}</div>
           </div>
+          <details className="cm-form-grid-full">
+            <summary className="cm-form-label">{t('cameras.advancedManualRtsp')}</summary>
+            <div style={{ marginTop: 'var(--space-2)' }}>
+              <LuxuryInput label={t('cameras.rtspUrlLabel')} value={form.rtsp_url}
+                onChange={e => setForm(p => ({ ...p, rtsp_url: e.target.value }))} placeholder="rtsp://..." />
+            </div>
+          </details>
         </div>
       )
 

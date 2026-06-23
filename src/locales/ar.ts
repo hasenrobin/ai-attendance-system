@@ -998,6 +998,9 @@ export const ar: TranslationDict = {
     connectionTitle: 'إعدادات الاتصال (اختياري)',
     connectionHint: 'لأسباب أمنية، لا تُعرض إعدادات الاتصال الحالية هنا. اترك الحقول فارغة للإبقاء على قيمها الحالية دون تغيير.',
     rtspUrlLabel: 'رابط RTSP',
+    rtspHostLabel: 'عنوان IP للكاميرا',
+    rtspAutoPathHint: 'القيمة الافتراضية 554. سيجرب العميل مسارات RTSP الشائعة تلقائياً.',
+    advancedManualRtsp: 'متقدم: أدخل رابط RTSP كامل يدوياً',
     onvifUrlLabel: 'رابط ONVIF',
     usernameLabel: 'اسم المستخدم',
     passwordLabel: 'كلمة المرور',
@@ -1225,6 +1228,10 @@ export const ar: TranslationDict = {
 
     provisioning: {
       failed: 'فشلت التهيئة التلقائية',
+      testingStreamPath: 'جاري اختبار مسار البث...',
+      mainStreamFound: 'تم العثور على البث الرئيسي',
+      subStreamFound: 'تم العثور على البث الفرعي',
+      couldNotFindRtspPath: 'لم يتم العثور على مسار RTSP للبث',
     },
 
     discovery: {
