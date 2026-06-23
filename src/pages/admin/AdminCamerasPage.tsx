@@ -255,15 +255,35 @@ export function AdminCamerasPage() {
       const parentCameraId = mode === 'nvr_dvr' && form.nvr_record_type === 'parent'
         ? null : (form.parent_nvr_id || null)
 
-      const { data: saved } = await updateCamera(camera.id, {
+      const manualRtspUrl = form.rtsp_url.trim()
+      const directRtspAutoMode = mode === 'direct_rtsp' && manualRtspUrl === ''
+      const streamPort = mode === 'direct_rtsp'
+        ? Number(form.stream_port.trim() || '554')
+        : (form.stream_port.trim() ? Number(form.stream_port.trim()) : null)
+      const connectionUpdates = {
         ...buildConnectionUpdates(form),
         ...buildIdentifierUpdates(mode, form),
         connection_mode: mode,
-        stream_port: form.stream_port.trim() ? Number(form.stream_port.trim()) : null,
+        ...(mode === 'direct_rtsp' ? { rtsp_url: manualRtspUrl || null } : {}),
+        stream_port: streamPort,
         parent_camera_id: parentCameraId,
-      })
+      }
+
+      const { data: saved, error: saveConnectionError } = await updateCamera(camera.id, connectionUpdates)
+      if (saveConnectionError) {
+        setProvisionWarning(`Failed to save camera connection settings: ${saveConnectionError}`)
+        return
+      }
+
       const savedCamera = saved ?? camera
       setCameras(prev => prev.map(c => c.id === savedCamera.id ? savedCamera : c))
+      console.info('[camera-provision] saved connection settings', {
+        cameraId: savedCamera.id,
+        connection_mode: savedCamera.connection_mode,
+        nvr_host: savedCamera.nvr_host,
+        stream_port: savedCamera.stream_port,
+        rtsp_url: directRtspAutoMode ? 'cleared for auto-resolve' : (manualRtspUrl ? 'manual set' : 'unchanged'),
+      })
 
       // Find the most-recently-seen online agent for this company.
       const { data: agent, error: agentError } = await selectOnlineAgent(camera.company_id)
@@ -291,6 +311,13 @@ export function AdminCamerasPage() {
         setProvisionWarning(jobError ?? 'Failed to create provision job.')
         return
       }
+      console.info('[camera-provision] created provision job', {
+        jobId,
+        cameraId: camera.id,
+        customerAgentId: agent.id,
+        jobType,
+        provisionMode,
+      })
 
       // Mark camera as provisioning and start polling (fire and forget).
       setProvisioningCameraIds(prev => new Set(prev).add(camera.id))

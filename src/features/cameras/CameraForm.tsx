@@ -142,7 +142,7 @@ export function effectiveConnectionFields(form: CameraFormState, previous?: Came
 // Only includes a field when the user has typed something (blank = "keep
 // existing" for password, rtsp_url, onvif_url, username).
 export function buildConnectionUpdates(form: CameraFormState): {
-  rtsp_url?: string
+  rtsp_url?: string | null
   onvif_url?: string
   username?: string
   password_encrypted?: string
