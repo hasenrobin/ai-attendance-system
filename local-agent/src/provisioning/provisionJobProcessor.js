@@ -18,6 +18,25 @@ import { isMediaMtxReady }           from '../mediaMtxProcess.js'
 // Individual steps have their own shorter timeouts (see provisioning/config.js).
 const PROVISION_TIMEOUT_MS = 60_000
 
+function shouldUseManualDirectRtsp(camera) {
+  if (!camera.rtsp_url) return false
+  if (!camera.nvr_host) return true
+
+  try {
+    const parsed = new URL(camera.rtsp_url)
+    const path = `${parsed.pathname}${parsed.search}`
+    if (path === '/stream') {
+      console.log('[provision:direct_rtsp] ignoring discovery placeholder RTSP path /stream; using auto resolver')
+      return false
+    }
+  } catch {
+    // If the stored value is not a parseable URL, keep the previous manual
+    // behavior so the pipeline reports a clear ffprobe/request error.
+  }
+
+  return true
+}
+
 function withTimeout(fn, ms) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
@@ -46,7 +65,7 @@ async function runDirectRtsp(cameraId, camera) {
   let selectedRtspPath
   let selectedStreamKind
 
-  if (camera.rtsp_url) {
+  if (shouldUseManualDirectRtsp(camera)) {
     rtspUrlWithCreds = buildRtspUrl({
       rtspUrl:  camera.rtsp_url,
       username: camera.username,

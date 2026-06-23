@@ -524,7 +524,7 @@ export function AdminCamerasPage() {
       connection_mode: mode as CameraConnectionMode,
       nvr_host: prefill.ip,
       stream_port: '554',
-      rtsp_url: prefill.rtsp_url ?? '',
+      rtsp_url: mode === 'direct_rtsp' ? '' : (prefill.rtsp_url ?? ''),
       onvif_url: prefill.onvif_url ?? '',
     })
     setFormError(null); setOnvifDiscovery(null); setCreateOpen(true)
