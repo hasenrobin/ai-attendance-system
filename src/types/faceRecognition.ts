@@ -138,6 +138,10 @@ export type EnrolledTemplate = {
   employeeId: string
   pose: PoseId
   embedding: number[]
+  /** Dimension of the embedding vector. Used to detect cross-engine incompatibility before computing distance. */
+  embeddingDimension: number
+  /** Engine that produced this embedding. Embeddings from different engines are never compared. */
+  embeddingEngine: string
 }
 
 /** A single candidate match between a live embedding and one enrolled template. */

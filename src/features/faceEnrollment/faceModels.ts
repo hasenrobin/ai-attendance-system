@@ -40,3 +40,12 @@ export const TINY_FACE_DETECTOR_OPTIONS = new faceapi.TinyFaceDetectorOptions({
 })
 
 export { faceapi }
+
+// ── Engine identity constants ─────────────────────────────────────────────────
+// Written into face_templates rows so the recognition pipeline can detect and
+// reject cross-engine comparisons (e.g. 128-d faceapi vs 512-d onnx_arcface).
+// The model name matches the file stem loaded above (face_recognition_model.bin).
+export const FACEAPI_ENGINE_NAME = 'faceapi' as const
+export const FACEAPI_MODEL_NAME = 'face_recognition_model' as const
+/** Dimension of descriptors produced by FaceRecognitionNet. */
+export const FACEAPI_EMBEDDING_DIMENSION = 128 as const

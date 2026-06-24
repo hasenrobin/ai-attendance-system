@@ -10,6 +10,8 @@ type DuplicateCheckPayload = {
   company_id?: string
   employee_id?: string
   templates?: TemplateInput[]
+  /** Engine that produced the new templates. Only existing templates from the same engine are compared. */
+  embedding_engine?: string
   match_distance_threshold?: number
   recognized_confidence_threshold?: number
   distance_normalizer?: number
@@ -18,7 +20,14 @@ type DuplicateCheckPayload = {
 type ExistingTemplateRow = {
   id: string
   employee_id: string
+  session_id: string
   embedding: number[]
+  embedding_engine: string | null
+}
+
+type ProfileRow = {
+  employee_id: string
+  active_session_id: string | null
 }
 
 const DEFAULT_MATCH_DISTANCE_THRESHOLD = 0.6
@@ -51,6 +60,7 @@ async function handleDuplicateCheck(
   const matchDistanceThreshold = payload.match_distance_threshold ?? DEFAULT_MATCH_DISTANCE_THRESHOLD
   const recognizedConfidenceThreshold = payload.recognized_confidence_threshold ?? DEFAULT_RECOGNIZED_CONFIDENCE_THRESHOLD
   const distanceNormalizer = payload.distance_normalizer ?? DEFAULT_DISTANCE_NORMALIZER
+  const probeEngine = payload.embedding_engine ?? 'faceapi'
   const newTemplates = payload.templates
     .map(template => template.embedding)
     .filter(validEmbedding)
@@ -59,9 +69,10 @@ async function handleDuplicateCheck(
     return jsonResponse({ error: 'At least one valid embedding is required.' }, 400)
   }
 
+  // Fetch profiles with active_session_id so we only compare against active templates.
   const { data: profiles, error: profileError } = await adminClient
     .from('employee_face_profiles')
-    .select('employee_id')
+    .select('employee_id, active_session_id')
     .eq('company_id', payload.company_id)
     .eq('enrollment_status', 'approved')
     .neq('employee_id', payload.employee_id)
@@ -70,14 +81,20 @@ async function handleDuplicateCheck(
     return jsonResponse({ error: `Failed to read enrolled profiles: ${profileError.message}` }, 500)
   }
 
-  const employeeIds = (profiles ?? []).map(row => row.employee_id as string)
+  const profileRows = (profiles ?? []) as ProfileRow[]
+  const employeeIds = profileRows.map(row => row.employee_id)
   if (employeeIds.length === 0) {
     return jsonResponse({ duplicate: false, matched_employee_id: null, confidence_score: null, distance: null })
   }
 
+  // Build a lookup: employee_id → active_session_id (null = legacy, include all)
+  const activeSessionById = new Map<string, string | null>(
+    profileRows.map(row => [row.employee_id, row.active_session_id ?? null]),
+  )
+
   const { data: existingTemplates, error: templateError } = await adminClient
     .from('face_templates')
-    .select('id, employee_id, embedding')
+    .select('id, employee_id, session_id, embedding, embedding_engine')
     .eq('company_id', payload.company_id)
     .in('employee_id', employeeIds)
 
@@ -85,9 +102,18 @@ async function handleDuplicateCheck(
     return jsonResponse({ error: `Failed to read enrolled templates: ${templateError.message}` }, 500)
   }
 
+  // Filter to active session and same engine before comparing.
+  const candidateTemplates = ((existingTemplates ?? []) as ExistingTemplateRow[]).filter(t => {
+    // Lifecycle filter: skip templates not belonging to the employee's active session.
+    const activeSession = activeSessionById.get(t.employee_id)
+    if (activeSession !== null && t.session_id !== activeSession) return false
+    // Engine filter: skip templates from a different engine — distances are meaningless.
+    if (t.embedding_engine && t.embedding_engine !== probeEngine) return false
+    return validEmbedding(t.embedding)
+  })
+
   let best: { employeeId: string; distance: number; confidenceScore: number } | null = null
-  for (const existing of (existingTemplates ?? []) as ExistingTemplateRow[]) {
-    if (!validEmbedding(existing.embedding)) continue
+  for (const existing of candidateTemplates) {
     for (const candidate of newTemplates) {
       const distance = euclideanDistance(candidate, existing.embedding)
       const confidenceScore = distanceToConfidence(distance, distanceNormalizer)

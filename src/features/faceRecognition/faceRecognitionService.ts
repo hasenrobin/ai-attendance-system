@@ -41,34 +41,55 @@ const EMPTY_STATS: EmployeeRecognitionStats = {
 
 /**
  * Returns face templates for employees whose enrollment has been approved.
- * Only `approved` profiles are candidates for recognition — pending/rejected/
- * not_enrolled employees are excluded.
+ * Only `approved` profiles are candidates — pending/rejected/not_enrolled excluded.
+ *
+ * Template lifecycle: if a profile has active_session_id set (new enrollments),
+ * only templates from that session are returned. Legacy rows (active_session_id=null)
+ * fall back to returning all templates for the employee to preserve backward compat.
  */
 export async function getEnrolledTemplates(companyId: string): Promise<TemplateListResult> {
+  // Include active_session_id so we can filter templates to the active enrollment only.
   const { data: profiles, error: profileError } = await supabase
     .from('employee_face_profiles')
-    .select('employee_id')
+    .select('employee_id, active_session_id')
     .eq('company_id', companyId)
     .eq('enrollment_status', 'approved')
 
   if (profileError) return { data: [], error: profileError.message }
 
-  const employeeIds = (profiles ?? []).map(row => row.employee_id as string)
-  if (employeeIds.length === 0) return { data: [], error: null }
+  const profileRows = profiles ?? []
+  if (profileRows.length === 0) return { data: [], error: null }
+
+  const employeeIds = profileRows.map(row => row.employee_id as string)
+  const activeSessionById = new Map<string, string | null>(
+    profileRows.map(row => [
+      row.employee_id as string,
+      (row.active_session_id as string | null) ?? null,
+    ]),
+  )
 
   const { data: templates, error: templateError } = await supabase
     .from('face_templates')
-    .select('id, employee_id, pose, embedding')
+    .select('id, employee_id, pose, embedding, embedding_dimension, embedding_engine, session_id')
     .eq('company_id', companyId)
     .in('employee_id', employeeIds)
 
   if (templateError) return { data: [], error: templateError.message }
 
-  const enrolled: EnrolledTemplate[] = (templates ?? []).map(row => ({
+  const activeTemplates = (templates ?? []).filter(row => {
+    const activeSession = activeSessionById.get(row.employee_id as string)
+    // null = legacy row → include all templates (backward compat)
+    // non-null = only include templates from the active session
+    return activeSession === null || (row.session_id as string) === activeSession
+  })
+
+  const enrolled: EnrolledTemplate[] = activeTemplates.map(row => ({
     templateId: row.id as string,
     employeeId: row.employee_id as string,
     pose: row.pose as PoseId,
     embedding: row.embedding as number[],
+    embeddingDimension: (row.embedding_dimension as number | null) ?? 128,
+    embeddingEngine: (row.embedding_engine as string | null) ?? 'faceapi',
   }))
 
   return { data: enrolled, error: null }
@@ -89,12 +110,15 @@ function euclideanDistance(a: number[], b: number[]): number | null {
   return Math.sqrt(sumSquares)
 }
 
-function warnEmbeddingDimensionMismatch(probeDimension: number, templateDimensions: number[]): void {
-  const uniqueTemplateDimensions = [...new Set(templateDimensions)].sort((a, b) => a - b)
+function warnEmbeddingDimensionMismatch(probeDimension: number, incompatible: EnrolledTemplate[]): void {
+  const dims = [...new Set(incompatible.map(t => t.embeddingDimension))].sort((a, b) => a - b)
+  const engines = [...new Set(incompatible.map(t => t.embeddingEngine))]
   console.warn(
-    '[face-recognition] Incompatible embedding dimensions. ' +
-    `Probe dimension=${probeDimension}; template dimensions=${uniqueTemplateDimensions.join(', ')}. ` +
-    'Refusing to compare different embedding model spaces.',
+    `[face-recognition] INCOMPATIBLE TEMPLATES SKIPPED: probe dimension=${probeDimension} ` +
+    `but ${incompatible.length} template(s) have dimension(s) [${dims.join(', ')}] ` +
+    `from engine(s) [${engines.join(', ')}]. ` +
+    'These employees will not be recognized until they re-enroll with the current engine. ' +
+    'Affected employee IDs: ' + [...new Set(incompatible.map(t => t.employeeId))].join(', '),
   )
 }
 
@@ -118,15 +142,17 @@ export function matchEmbedding(
   templates: EnrolledTemplate[],
   thresholds: RecognitionThresholds = DEFAULT_RECOGNITION_THRESHOLDS,
 ): RecognitionResult {
-  const mismatchedDimensions = templates
-    .map(template => template.embedding.length)
-    .filter(dimension => dimension !== embedding.length)
+  // Pre-filter: only compare templates whose dimension matches the probe.
+  // Cross-dimension (= cross-engine) comparisons are meaningless and silently
+  // return wrong results. Warn explicitly so ops can detect the misconfiguration.
+  const compatibleTemplates = templates.filter(t => t.embeddingDimension === embedding.length)
+  const incompatibleTemplates = templates.filter(t => t.embeddingDimension !== embedding.length)
 
-  if (mismatchedDimensions.length > 0) {
-    warnEmbeddingDimensionMismatch(embedding.length, mismatchedDimensions)
+  if (incompatibleTemplates.length > 0) {
+    warnEmbeddingDimensionMismatch(embedding.length, incompatibleTemplates)
   }
 
-  const candidates: FaceMatch[] = templates
+  const candidates: FaceMatch[] = compatibleTemplates
     .flatMap(template => {
       const distance = euclideanDistance(embedding, template.embedding)
       if (distance === null) return []
@@ -143,7 +169,8 @@ export function matchEmbedding(
 
   if (candidates.length === 0) {
     const hasTemplates = templates.length > 0
-    const hasCompatibleTemplates = templates.some(template => template.embedding.length === embedding.length)
+    const hasCompatibleTemplates = compatibleTemplates.length > 0
+    const hasIncompatible = incompatibleTemplates.length > 0
     return {
       status: 'unknown',
       employeeId: null,
@@ -152,9 +179,16 @@ export function matchEmbedding(
       candidates: [],
       reasons: !hasTemplates
         ? ['No approved face templates are enrolled for this company.']
-        : !hasCompatibleTemplates
-          ? [`No enrolled templates are compatible with the probe embedding dimension (${embedding.length}). Re-enrollment with a matching face engine is required.`]
-        : [`No enrolled template is within the match distance threshold (${thresholds.matchDistanceThreshold}).`],
+        : hasIncompatible && !hasCompatibleTemplates
+          ? [
+              `All ${templates.length} enrolled template(s) were produced by a different engine and cannot be compared ` +
+              `(probe dimension=${embedding.length}, template engines: ` +
+              [...new Set(incompatibleTemplates.map(t => t.embeddingEngine))].join(', ') +
+              '). Employees must re-enroll with the current engine before recognition works.',
+            ]
+          : !hasCompatibleTemplates
+            ? [`No enrolled templates are compatible with the probe embedding dimension (${embedding.length}). Re-enrollment with a matching face engine is required.`]
+            : [`No enrolled template is within the match distance threshold (${thresholds.matchDistanceThreshold}).`],
     }
   }
 

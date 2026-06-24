@@ -12,6 +12,7 @@ import {
   detectBlink,
   getNoseRatio,
 } from './faceLiveness'
+import { FACEAPI_EMBEDDING_DIMENSION, FACEAPI_ENGINE_NAME, FACEAPI_MODEL_NAME } from './faceModels'
 import {
   abandonEnrollmentSession,
   checkDuplicateFaceEnrollment,
@@ -24,6 +25,7 @@ import type {
   EnrollmentWizardStage,
   FaceEnrollmentSession,
   PoseBaseline,
+  PoseId,
   QualityCheckResult,
   StepResult,
 } from '../../types/faceEnrollment'
@@ -83,6 +85,10 @@ export function FaceEnrollmentWizard({ mode, companyId, employeeId, employeeName
   const earHistoryRef = useRef<number[]>([])
   const blinkDetectedRef = useRef(false)
   const templatesRef = useRef<CompleteSessionTemplate[]>([])
+  // Kept in parallel with templatesRef to supply the liveness descriptor-consistency check.
+  // captureDescriptor() returns Float32Array; we convert to number[] for storage but keep
+  // the raw typed array here so computeLivenessScore can run euclideanDistance across poses.
+  const descriptorsRef = useRef<Partial<Record<PoseId, Float32Array>>>({})
   const profilePhotoRef = useRef<Blob | null>(null)
   const advancingRef = useRef(false)
   const stageRef = useRef(stage)
@@ -213,10 +219,17 @@ export function FaceEnrollmentWizard({ mode, companyId, employeeId, employeeName
         const descriptor = await captureDescriptor()
         if (descriptor) {
           templatesRef.current.push({
-            pose: step.id,
+            pose: step.id as PoseId,
             embedding: Array.from(descriptor),
             quality_score: quality.score,
+            // Derived from the actual descriptor length — not a hardcoded constant —
+            // so the stored metadata reflects the true output of the model.
+            embedding_dimension: descriptor.length || FACEAPI_EMBEDDING_DIMENSION,
+            embedding_engine: FACEAPI_ENGINE_NAME,
+            embedding_model: FACEAPI_MODEL_NAME,
           })
+          // Keep the Float32Array for the liveness descriptor-consistency check.
+          descriptorsRef.current[step.id as PoseId] = descriptor
         } else {
           reasons.push('Could not capture a face template for this position.')
         }
@@ -268,7 +281,9 @@ export function FaceEnrollmentWizard({ mode, companyId, employeeId, employeeName
       const liveness = computeLivenessScore({
         completedPoses,
         blinkDetected: blinkDetectedRef.current,
-        descriptors: {},
+        // Fixed: was always passed as {} so descriptor-consistency 15pts were never earned.
+        // Now supplies the Float32Arrays captured per-pose for the euclidean-distance check.
+        descriptors: descriptorsRef.current,
       })
 
       const stepReasons = stepResults.flatMap((r) => r.reasons)
@@ -376,6 +391,7 @@ export function FaceEnrollmentWizard({ mode, companyId, employeeId, employeeName
     earHistoryRef.current = []
     blinkDetectedRef.current = false
     templatesRef.current = []
+    descriptorsRef.current = {}
     profilePhotoRef.current = null
     advancingRef.current = false
     setStepIndex(0)

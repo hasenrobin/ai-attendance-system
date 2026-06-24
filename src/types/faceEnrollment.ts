@@ -31,6 +31,12 @@ export type FaceTemplate = {
   embedding: number[]
   pose: PoseId
   quality_score: number | null
+  /** Length of the embedding vector. Added by migration 20260624000000. Defaults to 128 for legacy rows. */
+  embedding_dimension: number
+  /** Engine that produced this embedding (faceapi | onnx_arcface). Defaults to 'faceapi' for legacy rows. */
+  embedding_engine: string
+  /** Model checkpoint within the engine. Defaults to 'face_recognition_model' for legacy rows. */
+  embedding_model: string
   created_at: string
 }
 
@@ -41,6 +47,13 @@ export type EmployeeFaceProfile = {
   profile_photo_url: string | null
   enrollment_status: EnrollmentStatus
   last_enrollment_at: string | null
+  /**
+   * Points to the session whose templates are the active matching set.
+   * NULL for legacy rows: all approved-session templates are used.
+   * Set on every completeEnrollmentSession() to retire old templates without deleting them.
+   * Added by migration 20260624000000.
+   */
+  active_session_id: string | null
   updated_at: string
 }
 

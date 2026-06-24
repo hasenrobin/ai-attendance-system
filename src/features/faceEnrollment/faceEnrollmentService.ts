@@ -12,10 +12,11 @@ export const FACE_ENROLLMENT_BUCKET = 'face-enrollment'
 const SESSION_COLUMNS =
   'id, company_id, employee_id, status, started_at, completed_at, quality_score, liveness_score, device_info, metadata, rejection_reason, created_at, updated_at'
 
-const TEMPLATE_COLUMNS = 'id, company_id, employee_id, session_id, embedding, pose, quality_score, created_at'
+const TEMPLATE_COLUMNS =
+  'id, company_id, employee_id, session_id, embedding, pose, quality_score, embedding_dimension, embedding_engine, embedding_model, created_at'
 
 const PROFILE_COLUMNS =
-  'employee_id, company_id, primary_template_id, profile_photo_url, enrollment_status, last_enrollment_at, updated_at'
+  'employee_id, company_id, primary_template_id, profile_photo_url, enrollment_status, last_enrollment_at, active_session_id, updated_at'
 
 type SessionResult = { data: FaceEnrollmentSession | null; error: string | null }
 type SessionListResult = { data: FaceEnrollmentSession[]; error: string | null }
@@ -65,6 +66,12 @@ export type CompleteSessionTemplate = {
   pose: PoseId
   embedding: number[]
   quality_score: number | null
+  /** Dimension of the embedding vector — must match the length of `embedding`. */
+  embedding_dimension: number
+  /** Engine that produced this embedding (e.g. 'faceapi'). */
+  embedding_engine: string
+  /** Model checkpoint within the engine (e.g. 'face_recognition_model'). */
+  embedding_model: string
 }
 
 export type CompleteSessionParams = {
@@ -90,6 +97,9 @@ export async function checkDuplicateFaceEnrollment(params: {
         pose: template.pose,
         embedding: template.embedding,
       })),
+      // Pass the engine so the duplicate check only compares against templates
+      // from the same engine — cross-engine distances are meaningless.
+      embedding_engine: params.templates[0]?.embedding_engine ?? 'faceapi',
       match_distance_threshold: DEFAULT_RECOGNITION_THRESHOLDS.matchDistanceThreshold,
       recognized_confidence_threshold: DEFAULT_RECOGNITION_THRESHOLDS.recognizedConfidenceThreshold,
       distance_normalizer: DEFAULT_RECOGNITION_THRESHOLDS.distanceNormalizer,
@@ -128,6 +138,9 @@ export async function completeEnrollmentSession(params: CompleteSessionParams): 
     embedding: template.embedding,
     pose: template.pose,
     quality_score: template.quality_score,
+    embedding_dimension: template.embedding_dimension,
+    embedding_engine: template.embedding_engine,
+    embedding_model: template.embedding_model,
   }))
 
   const { data: insertedTemplates, error: templateError } = await supabase
@@ -159,6 +172,11 @@ export async function completeEnrollmentSession(params: CompleteSessionParams): 
         profile_photo_url: path,
         enrollment_status: 'approved',
         last_enrollment_at: now,
+        // Point to the new session so getEnrolledTemplates() uses only these
+        // 5 templates for recognition. Old templates remain in the DB as
+        // audit trail but are excluded from matching until the employee
+        // reverts to legacy behavior (active_session_id = null).
+        active_session_id: params.session_id,
         updated_at: now,
       },
       { onConflict: 'employee_id' },

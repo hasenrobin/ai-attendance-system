@@ -166,7 +166,14 @@ async function testLiveness(): Promise<void> {
 // 4. Matching threshold behavior (recognized / low_confidence / unknown)
 // ---------------------------------------------------------------------------
 
-const ZERO_TEMPLATE: EnrolledTemplate = { templateId: 't1', employeeId: 'emp-1', pose: 'center', embedding: [0] }
+const ZERO_TEMPLATE: EnrolledTemplate = {
+  templateId: 't1',
+  employeeId: 'emp-1',
+  pose: 'center',
+  embedding: [0],
+  embeddingDimension: 1,
+  embeddingEngine: 'faceapi',
+}
 
 function testMatchingThresholds(): void {
   console.log('4. Matching threshold behavior (matchEmbedding)')
