@@ -426,6 +426,16 @@ export async function runFaceRecognitionDebug(
   } else if (best.recognitionEventId) {
     steps.push(step('event', 'Attendance event written', actionIsIgnore ? 'skip' : 'warn',
       `No attendance event created. Decision: ${best.attendanceAction}. recognition_event id=${best.recognitionEventId}`))
+  } else if (best.error) {
+    // Neither event was recorded — pipeline write error (e.g. RLS violation on INSERT)
+    steps.push(step('event_record', 'Recognition event recorded', 'fail',
+      `Event INSERT failed: ${best.error}`))
+    errors.push(`Pipeline write error: ${best.error}`)
+  }
+
+  // Surface partial write errors: recognition event succeeded but attendance write failed
+  if (best.error && best.recognitionEventId && !best.attendanceEventId && !actionIsIgnore) {
+    errors.push(`Attendance event write error: ${best.error}`)
   }
 
   report.ok = errors.length === 0
