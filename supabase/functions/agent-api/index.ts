@@ -383,7 +383,6 @@ async function updateAgent(
 
   const agent = await loadAgent(supabase, agentId)
   if (!agent) return jsonResponse({ error: 'Agent not found.' }, 404)
-  if (agent.status === 'revoked') return jsonResponse({ error: 'Revoked agents cannot be updated.' }, 409)
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
   const nextName = payload.agent_name?.trim()
@@ -434,9 +433,6 @@ async function setAgentStatus(
 
   const agent = await loadAgent(supabase, agentId)
   if (!agent) return jsonResponse({ error: 'Agent not found.' }, 404)
-  if (agent.status === 'revoked' && status !== 'revoked') {
-    return jsonResponse({ error: 'Revoked agents cannot be reactivated.' }, 409)
-  }
 
   const now = new Date().toISOString()
   const { data: updatedAgent, error } = await supabase
