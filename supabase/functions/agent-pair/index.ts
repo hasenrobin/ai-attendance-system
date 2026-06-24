@@ -177,7 +177,109 @@ Deno.serve(async (req: Request) => {
     .select('id, company_id, branch_id, name, status')
     .single()
 
+  // Re-pair path: same machine already has a non-revoked agent record.
+  // Unique partial index (WHERE status <> 'revoked') blocks a fresh INSERT.
+  // Recover by revoking stale tokens, refreshing metadata, and re-issuing
+  // a new token — identical response shape as a fresh pair.
   if (agentInsertError || !agentRow) {
+    if (agentInsertError?.code === '23505') {
+      const { data: existingAgent, error: existingErr } = await supabase
+        .from('customer_agents')
+        .select('id, company_id, branch_id, name, status')
+        .eq('company_id', code.company_id)
+        .eq('device_fingerprint_hash', deviceFingerprintHash)
+        .neq('status', 'revoked')
+        .maybeSingle()
+
+      if (!existingErr && existingAgent) {
+        const existingId = existingAgent.id as string
+
+        await supabase
+          .from('agent_tokens')
+          .update({ status: 'revoked', revoked_at: now })
+          .eq('agent_id', existingId)
+          .eq('status', 'active')
+
+        await supabase
+          .from('customer_agents')
+          .update({
+            machine_name: payload.machine_name?.trim() || null,
+            os_platform: payload.os_platform?.trim() || null,
+            os_version: payload.os_version?.trim() || null,
+            version: payload.version?.trim() || null,
+            local_ip: payload.local_ip?.trim() || null,
+            capabilities: Array.isArray(payload.capabilities) ? payload.capabilities : [],
+            status: 'active',
+            last_seen_at: now,
+            last_heartbeat_at: now,
+            updated_at: now,
+          })
+          .eq('id', existingId)
+
+        const { data: claimedCodeRepair, error: claimRepairErr } = await supabase
+          .from('agent_pairing_codes')
+          .update({ status: 'used', used_at: now, used_by_agent_id: existingId, updated_at: now })
+          .eq('id', code.id)
+          .eq('status', 'active')
+          .select('id')
+          .maybeSingle()
+
+        if (claimRepairErr || !claimedCodeRepair) {
+          await audit(supabase, req, {
+            agent_id: existingId,
+            company_id: code.company_id,
+            pairing_code_id: code.id,
+            event_type: 'pairing_failed_code_race',
+            success: false,
+            details: { message: claimRepairErr?.message ?? 'Re-pair: code already consumed.' },
+          })
+          return jsonResponse({ error: 'Pairing code was already used.' }, 409)
+        }
+
+        const rawRepairToken = generateAgentToken()
+        const repairTokenHash = await hashAgentToken(rawRepairToken, tokenPepper)
+        const { error: repairTokenErr } = await supabase
+          .from('agent_tokens')
+          .insert({ agent_id: existingId, token_hash: repairTokenHash, status: 'active', issued_at: now })
+          .select('id')
+          .single()
+
+        if (repairTokenErr) {
+          await audit(supabase, req, {
+            agent_id: existingId,
+            company_id: code.company_id,
+            pairing_code_id: code.id,
+            event_type: 'pairing_failed_token_insert',
+            success: false,
+            details: { message: repairTokenErr.message },
+          })
+          return jsonResponse({ error: 'Failed to re-issue agent token.' }, 500)
+        }
+
+        await audit(supabase, req, {
+          agent_id: existingId,
+          company_id: code.company_id,
+          pairing_code_id: code.id,
+          event_type: 'pairing_succeeded_repaired',
+          success: true,
+          details: { previous_status: existingAgent.status },
+        })
+
+        return jsonResponse({
+          status: 'paired',
+          agent: {
+            id: existingId,
+            company_id: existingAgent.company_id as string,
+            branch_id: existingAgent.branch_id as string | null,
+            name: existingAgent.name as string,
+            status: 'active',
+          },
+          token: rawRepairToken,
+          token_type: 'Bearer',
+        })
+      }
+    }
+
     await audit(supabase, req, {
       company_id: code.company_id,
       pairing_code_id: code.id,

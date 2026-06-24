@@ -78,9 +78,33 @@ console.log('============================================================')
 let identity = loadIdentity()
 
 if (!identity && AGENT_PAIRING_CODE) {
-  console.log('[pairing] No local identity found. Pairing with provided AGENT_PAIRING_CODE...')
-  identity = await pairAgent(AGENT_PAIRING_CODE)
-  console.log(`[pairing] Paired successfully. agentId=${identity.agentId} companyId=${identity.companyId}`)
+  // Retry loop: transient failures (network, server) retry with backoff.
+  // Permanent failures (invalid/expired/used code) break immediately.
+  const PERMANENT = /invalid pairing code|pairing code expired|pairing code.*already used|not active/i
+  let attempt = 0
+  while (!identity) {
+    attempt++
+    console.log(`[pairing] attempt=${attempt} calling agent-pair endpoint...`)
+    writeStartupLog(`[pairing] attempt=${attempt} calling agent-pair endpoint`)
+    try {
+      identity = await pairAgent(AGENT_PAIRING_CODE)
+      console.log(`[pairing] SUCCESS agentId=${identity.agentId} companyId=${identity.companyId}`)
+      writeStartupLog(`[pairing] SUCCESS agentId=${identity.agentId} companyId=${identity.companyId}`)
+    } catch (err) {
+      const msg = err?.message ?? String(err)
+      console.error(`[pairing] attempt=${attempt} FAILED: ${msg}`)
+      writeStartupLog(`[pairing] attempt=${attempt} FAILED: ${msg}`)
+      if (PERMANENT.test(msg)) {
+        console.error('[pairing] Permanent error — generate a new pairing code, update AGENT_PAIRING_CODE in .env.agent, and restart the service.')
+        writeStartupLog('[pairing] PERMANENT ERROR — idling. Update AGENT_PAIRING_CODE in .env.agent and restart.')
+        break
+      }
+      const delaySec = Math.min(60, attempt * 10)
+      console.log(`[pairing] retrying in ${delaySec}s...`)
+      writeStartupLog(`[pairing] retrying in ${delaySec}s`)
+      await new Promise(resolve => setTimeout(resolve, delaySec * 1000))
+    }
+  }
 }
 
 if (!identity) {
