@@ -25,7 +25,7 @@ export const BASIC_LIVENESS_THRESHOLDS = {
   /** Detector confidence (0-1) below which a "face" is treated as not present. */
   minDetectionScore: 0.5,
   /** Face bounding-box area as a fraction of the frame area. */
-  minFaceAreaRatio: 0.03,
+  minFaceAreaRatio: 0.06,
   /** Laplacian variance of the face crop (focus quality). */
   minSharpnessVariance: 12,
   /** Mean luminance (0-255) of the face crop. */

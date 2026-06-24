@@ -12,7 +12,7 @@ import { computeEAR, getNoseRatio } from './faceLiveness'
 
 export const QUALITY_THRESHOLDS = {
   /** Face bounding-box area as a fraction of the frame area. */
-  minFaceAreaRatio: 0.05,
+  minFaceAreaRatio: 0.06,
   maxFaceAreaRatio: 0.7,
   /** Max distance of the face's bbox center from the frame center, as a fraction of frame size. */
   maxCenterOffset: 0.3,

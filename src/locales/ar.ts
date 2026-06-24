@@ -1538,6 +1538,7 @@ export const ar: TranslationDict = {
       rejected: 'مرفوض',
     },
     attendanceAction: {
+      pending_confirmation: 'في انتظار التأكيد',
       check_in: 'تسجيل حضور',
       check_out: 'تسجيل انصراف',
       temporary_exit: 'خروج مؤقت',
@@ -1704,6 +1705,10 @@ export const ar: TranslationDict = {
   },
 
   faceEnrollment: {
+    errors: {
+      duplicateFace: 'يبدو أن هذا الوجه مسجل بالفعل لموظف آخر. تم منع التسجيل للسلامة.',
+      duplicateCheckFailed: 'تعذر التحقق مما إذا كان هذا الوجه مسجلاً مسبقاً. تم منع التسجيل للسلامة.',
+    },
     subtitle: 'أكمل جلسة تصوير مباشرة موجَّهة حتى يتمكن النظام من التحقق من تسجيلك واعتماده.',
     cameraCheck: {
       title: 'فحص الكاميرا',

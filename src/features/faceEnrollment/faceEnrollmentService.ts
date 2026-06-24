@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase'
+import { DEFAULT_RECOGNITION_THRESHOLDS } from '../faceRecognition/faceRecognitionConfig'
 import type {
   EmployeeFaceProfile,
   FaceEnrollmentSession,
@@ -21,6 +22,14 @@ type SessionListResult = { data: FaceEnrollmentSession[]; error: string | null }
 type TemplateListResult = { data: FaceTemplate[]; error: string | null }
 type ProfileResult = { data: EmployeeFaceProfile | null; error: string | null }
 type VoidResult = { error: string | null }
+
+type DuplicateFaceResult = {
+  duplicate: boolean
+  matched_employee_id: string | null
+  confidence_score: number | null
+  distance: number | null
+  error: string | null
+}
 
 export async function createEnrollmentSession(params: {
   company_id: string
@@ -66,6 +75,44 @@ export type CompleteSessionParams = {
   liveness_score: number
   templates: CompleteSessionTemplate[]
   profile_photo: Blob
+}
+
+export async function checkDuplicateFaceEnrollment(params: {
+  company_id: string
+  employee_id: string
+  templates: CompleteSessionTemplate[]
+}): Promise<DuplicateFaceResult> {
+  const { data, error } = await supabase.functions.invoke('face-enrollment-check-duplicate', {
+    body: {
+      company_id: params.company_id,
+      employee_id: params.employee_id,
+      templates: params.templates.map(template => ({
+        pose: template.pose,
+        embedding: template.embedding,
+      })),
+      match_distance_threshold: DEFAULT_RECOGNITION_THRESHOLDS.matchDistanceThreshold,
+      recognized_confidence_threshold: DEFAULT_RECOGNITION_THRESHOLDS.recognizedConfidenceThreshold,
+      distance_normalizer: DEFAULT_RECOGNITION_THRESHOLDS.distanceNormalizer,
+    },
+  })
+
+  if (error) {
+    return {
+      duplicate: false,
+      matched_employee_id: null,
+      confidence_score: null,
+      distance: null,
+      error: error.message,
+    }
+  }
+
+  return {
+    duplicate: Boolean(data?.duplicate),
+    matched_employee_id: typeof data?.matched_employee_id === 'string' ? data.matched_employee_id : null,
+    confidence_score: typeof data?.confidence_score === 'number' ? data.confidence_score : null,
+    distance: typeof data?.distance === 'number' ? data.distance : null,
+    error: null,
+  }
 }
 
 /**

@@ -122,6 +122,7 @@ export async function runRecognitionPipeline(
       previousEvents: knownEvents,
       cooldownSeconds: thresholds.cooldownSeconds,
       companyId: context.companyId,
+      cameraId: context.cameraId,
       cameraDirection: context.cameraDirection ?? null,
     })
 

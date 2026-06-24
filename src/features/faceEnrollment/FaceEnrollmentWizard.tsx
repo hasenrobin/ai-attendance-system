@@ -14,6 +14,7 @@ import {
 } from './faceLiveness'
 import {
   abandonEnrollmentSession,
+  checkDuplicateFaceEnrollment,
   completeEnrollmentSession,
   createEnrollmentSession,
   rejectEnrollmentSession,
@@ -287,6 +288,40 @@ export function FaceEnrollmentWizard({ mode, companyId, employeeId, employeeName
       }
 
       if (pass && profilePhotoRef.current) {
+        const duplicateCheck = await checkDuplicateFaceEnrollment({
+          company_id: companyId,
+          employee_id: employeeId,
+          templates: templatesRef.current,
+        })
+
+        if (duplicateCheck.error) {
+          const message = t('faceEnrollment.errors.duplicateCheckFailed')
+          sessionResult.pass = false
+          sessionResult.reasons = [message]
+          setSubmitError(`${message}: ${duplicateCheck.error}`)
+          setResult(sessionResult)
+          setStage('complete')
+          return
+        }
+
+        if (duplicateCheck.duplicate) {
+          const message = t('faceEnrollment.errors.duplicateFace')
+          sessionResult.pass = false
+          sessionResult.reasons = [message]
+          const { error } = await rejectEnrollmentSession({
+            session_id: session.id,
+            company_id: companyId,
+            employee_id: employeeId,
+            quality_score: overallQuality,
+            liveness_score: liveness.score,
+            reason: message,
+          })
+          if (error) setSubmitError(error)
+          setResult(sessionResult)
+          setStage('complete')
+          return
+        }
+
         const { error } = await completeEnrollmentSession({
           session_id: session.id,
           company_id: companyId,
@@ -461,6 +496,7 @@ export function FaceEnrollmentWizard({ mode, companyId, employeeId, employeeName
               <h3 className="fe-panel-title">
                 {t('faceEnrollment.capture.stepLabel')} {stepIndex + 1} / {ENROLLMENT_STEPS.length}
               </h3>
+              {modelsError && <div className="fe-error-box"><p>{modelsError}</p></div>}
               {currentStep && (
                 <>
                   <p className="fe-panel-text fe-panel-text--strong">{t(currentStep.titleKey)}</p>

@@ -18,7 +18,11 @@ import type {
   RecognitionResult,
   RecognitionStatus,
 } from '../../types/faceRecognition'
-import { DEFAULT_RECOGNITION_THRESHOLDS } from './faceRecognitionConfig'
+import {
+  CONSECUTIVE_MATCH_REQUIRED_COUNT,
+  CONSECUTIVE_MATCH_WINDOW_SECONDS,
+  DEFAULT_RECOGNITION_THRESHOLDS,
+} from './faceRecognitionConfig'
 import { getEmployeeAttendanceContext } from './attendanceStateService'
 
 export type AttendanceDecisionInput = {
@@ -29,6 +33,8 @@ export type AttendanceDecisionInput = {
   cooldownSeconds?: number
   /** Required to look up the employee's real attendance state. */
   companyId: string
+  /** Required for same-camera consecutive-match confirmation. */
+  cameraId?: string | null
   /**
    * Optional hint derived from the recognizing camera's free-text
    * camera_type (e.g. containing "entry"/"exit"). Only used to disambiguate
@@ -43,6 +49,43 @@ const IGNORE_ACTION_BY_STATUS: Partial<Record<RecognitionStatus, AttendanceActio
   unknown: 'ignore_unrecognized',
   low_confidence: 'ignore_low_confidence',
   rejected: 'ignore_rejected',
+}
+
+function getEventAttendanceAction(event: FaceRecognitionEvent): string | null {
+  const action = event.metadata?.attendance_action
+  return typeof action === 'string' ? action : null
+}
+
+function countConsecutiveMatches(input: {
+  employeeId: string
+  cameraId: string | null | undefined
+  eventTimeMs: number
+  previousEvents: FaceRecognitionEvent[]
+}): number {
+  const { employeeId, cameraId, eventTimeMs, previousEvents } = input
+  if (!cameraId) return 1
+
+  const windowStartMs = eventTimeMs - CONSECUTIVE_MATCH_WINDOW_SECONDS * 1000
+  const sameCameraEvents = previousEvents
+    .filter(event => event.camera_id === cameraId)
+    .filter(event => {
+      const t = new Date(event.event_timestamp).getTime()
+      return t >= windowStartMs && t < eventTimeMs
+    })
+    .sort((a, b) => new Date(b.event_timestamp).getTime() - new Date(a.event_timestamp).getTime())
+
+  let count = 1
+  for (const event of sameCameraEvents) {
+    const sameEmployeeRecognized =
+      event.employee_id === employeeId &&
+      event.recognition_status === 'recognized'
+
+    if (!sameEmployeeRecognized) break
+    count += 1
+    if (count >= CONSECUTIVE_MATCH_REQUIRED_COUNT) break
+  }
+
+  return count
 }
 
 export async function decideAttendanceAction(input: AttendanceDecisionInput): Promise<AttendanceDecision> {
@@ -63,12 +106,34 @@ export async function decideAttendanceAction(input: AttendanceDecisionInput): Pr
   const employeeId = recognitionResult.employeeId
   const eventTimeMs = new Date(eventTimestamp).getTime()
 
+  const consecutiveMatches = countConsecutiveMatches({
+    employeeId,
+    cameraId: input.cameraId,
+    eventTimeMs,
+    previousEvents,
+  })
+
+  if (consecutiveMatches < CONSECUTIVE_MATCH_REQUIRED_COUNT) {
+    return {
+      action: 'pending_confirmation',
+      employeeId,
+      eventTimestamp,
+      reason: `Recognized ${consecutiveMatches}/${CONSECUTIVE_MATCH_REQUIRED_COUNT} required consecutive same-camera frame(s) within ${CONSECUTIVE_MATCH_WINDOW_SECONDS}s. Attendance will be created after confirmation.`,
+      decisionSource: 'recognition_status',
+      duplicateProtectionApplied: true,
+    }
+  }
+
   // Rule 12: cooldown is *additional* protection against rapid repeated
   // recognitions of the same person. Checked first, against
   // face_recognition_events only, so a burst of frames doesn't trigger a
   // full attendance-state lookup for every frame.
   const lastRecognized = previousEvents
-    .filter(event => event.employee_id === employeeId && event.recognition_status === 'recognized')
+    .filter(event =>
+      event.employee_id === employeeId &&
+      event.recognition_status === 'recognized' &&
+      getEventAttendanceAction(event) !== 'pending_confirmation'
+    )
     .sort((a, b) => new Date(b.event_timestamp).getTime() - new Date(a.event_timestamp).getTime())[0]
 
   if (lastRecognized) {

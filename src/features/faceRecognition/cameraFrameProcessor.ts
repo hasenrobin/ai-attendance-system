@@ -154,8 +154,8 @@ export async function processCameraFrame(
   const fromDate = new Date(new Date(eventTimestamp).getTime() - thresholds.cooldownSeconds * 1000).toISOString()
   const { data: previousEvents, error: eventsError } = await getRecognitionEvents(
     camera.company_id,
-    { status: 'recognized', fromDate },
-    50,
+    { fromDate },
+    100,
   )
   if (eventsError) return { cameraId, results: [], error: eventsError }
 

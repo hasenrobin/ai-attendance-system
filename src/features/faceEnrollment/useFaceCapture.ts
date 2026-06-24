@@ -89,7 +89,8 @@ export function useFaceCapture(
               setDetection(detections[0] ?? null)
               setQuality(evaluateFaceQuality(detections, imageData))
             })
-            .catch(() => {
+            .catch((err: unknown) => {
+              setModelsError(err instanceof Error ? err.message : 'Face detection failed after model initialization.')
               setDetection(null)
               setQuality(null)
             })
@@ -109,6 +110,7 @@ export function useFaceCapture(
   }, [active, modelsLoading, modelsError, videoRef])
 
   const captureDescriptor = useCallback(async (): Promise<Float32Array | null> => {
+    await loadFaceModels()
     const canvas = canvasRef.current
     if (!canvas) return null
     const result = await faceapi

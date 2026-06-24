@@ -43,13 +43,13 @@ export const MATCH_DISTANCE_THRESHOLD = 0.6
 export const DISTANCE_NORMALIZER = 1.0
 
 /** Confidence (0-100) at or above which a match is treated as 'recognized'. */
-export const RECOGNIZED_CONFIDENCE_THRESHOLD = 60
+export const RECOGNIZED_CONFIDENCE_THRESHOLD = 75
 
 /**
  * Confidence (0-100) at or above which a match below RECOGNIZED_CONFIDENCE_THRESHOLD
  * is treated as 'low_confidence' rather than 'unknown'.
  */
-export const LOW_CONFIDENCE_THRESHOLD = 40
+export const LOW_CONFIDENCE_THRESHOLD = 50
 
 /**
  * Minimum number of seconds between two 'recognized' events for the same
@@ -58,6 +58,12 @@ export const LOW_CONFIDENCE_THRESHOLD = 40
  * resulting attendance action is suppressed (ignore_duplicate).
  */
 export const COOLDOWN_SECONDS = 300
+
+/** Number of same-employee/same-camera recognized frames required before attendance is written. */
+export const CONSECUTIVE_MATCH_REQUIRED_COUNT = 3
+
+/** Maximum age of prior matching frames for the consecutive-match gate. */
+export const CONSECUTIVE_MATCH_WINDOW_SECONDS = 10
 
 /**
  * Detector confidence (0-1) below which a detected face is ignored entirely
@@ -69,7 +75,7 @@ export const MIN_DETECTION_SCORE = 0.5
  * How often (ms) the live recognition monitor captures a frame from a camera
  * stream and runs it through the recognition pipeline.
  */
-export const FRAME_CAPTURE_INTERVAL_MS = 4000
+export const FRAME_CAPTURE_INTERVAL_MS = 2000
 
 // ---------------------------------------------------------------------------
 // Per-company threshold overrides (Phase 4)

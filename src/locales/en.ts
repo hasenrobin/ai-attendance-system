@@ -1542,6 +1542,7 @@ export const en = {
       return_from_exit: 'Return From Exit',
       mission_departure: 'Mission Departure',
       mission_return: 'Mission Return',
+      pending_confirmation: 'Pending Confirmation',
       ignore_duplicate: 'Duplicate (Ignored)',
       ignore_low_confidence: 'Low Confidence (Ignored)',
       ignore_unrecognized: 'Unrecognized (Ignored)',
@@ -1711,6 +1712,10 @@ export const en = {
       requestingAccess: 'Requesting camera access…',
       loadingModels: 'Loading face detection models…',
       continue: 'Continue',
+    },
+    errors: {
+      duplicateFace: 'This face appears to be already enrolled for another employee. Enrollment was blocked for safety.',
+      duplicateCheckFailed: 'Could not verify whether this face is already enrolled. Enrollment was blocked for safety.',
     },
     instructions: {
       title: 'Before You Begin',

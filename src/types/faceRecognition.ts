@@ -176,6 +176,7 @@ export type AttendanceActionType =
   | 'return_from_exit'
   | 'mission_departure'
   | 'mission_return'
+  | 'pending_confirmation'
   | 'ignore_duplicate'
   | 'ignore_low_confidence'
   | 'ignore_unrecognized'
