@@ -45,6 +45,7 @@ import { AdminShell } from '../layouts/AdminShell'
 import { AdminDashboard } from '../pages/admin/AdminDashboard'
 import { AdminCamerasPage } from '../pages/admin/AdminCamerasPage'
 import { AdminAgentsPage } from '../pages/admin/AdminAgentsPage'
+import { FaceRecognitionDebugPage } from '../pages/admin/FaceRecognitionDebugPage'
 import { useI18n } from '../hooks/useI18n'
 
 function getPath(): string {
@@ -193,6 +194,8 @@ export function AppRouter() {
       ? <AdminAgentsPage />
       : path.startsWith('/admin/cameras')
       ? <AdminCamerasPage />
+      : path.startsWith('/admin/face-debug')
+      ? <FaceRecognitionDebugPage />
       : <AdminDashboard />
 
     return (
