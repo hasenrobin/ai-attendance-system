@@ -78,14 +78,24 @@ export async function getEnrolledTemplates(companyId: string): Promise<TemplateL
 // Matching
 // ---------------------------------------------------------------------------
 
-function euclideanDistance(a: number[], b: number[]): number {
-  const length = Math.min(a.length, b.length)
+function euclideanDistance(a: number[], b: number[]): number | null {
+  if (a.length !== b.length) return null
+
   let sumSquares = 0
-  for (let i = 0; i < length; i += 1) {
+  for (let i = 0; i < a.length; i += 1) {
     const diff = a[i] - b[i]
     sumSquares += diff * diff
   }
   return Math.sqrt(sumSquares)
+}
+
+function warnEmbeddingDimensionMismatch(probeDimension: number, templateDimensions: number[]): void {
+  const uniqueTemplateDimensions = [...new Set(templateDimensions)].sort((a, b) => a - b)
+  console.warn(
+    '[face-recognition] Incompatible embedding dimensions. ' +
+    `Probe dimension=${probeDimension}; template dimensions=${uniqueTemplateDimensions.join(', ')}. ` +
+    'Refusing to compare different embedding model spaces.',
+  )
 }
 
 function distanceToConfidence(distance: number, distanceNormalizer: number): number {
@@ -108,9 +118,18 @@ export function matchEmbedding(
   templates: EnrolledTemplate[],
   thresholds: RecognitionThresholds = DEFAULT_RECOGNITION_THRESHOLDS,
 ): RecognitionResult {
+  const mismatchedDimensions = templates
+    .map(template => template.embedding.length)
+    .filter(dimension => dimension !== embedding.length)
+
+  if (mismatchedDimensions.length > 0) {
+    warnEmbeddingDimensionMismatch(embedding.length, mismatchedDimensions)
+  }
+
   const candidates: FaceMatch[] = templates
-    .map(template => {
+    .flatMap(template => {
       const distance = euclideanDistance(embedding, template.embedding)
+      if (distance === null) return []
       return {
         templateId: template.templateId,
         employeeId: template.employeeId,
@@ -123,14 +142,18 @@ export function matchEmbedding(
     .sort((a, b) => a.distance - b.distance)
 
   if (candidates.length === 0) {
+    const hasTemplates = templates.length > 0
+    const hasCompatibleTemplates = templates.some(template => template.embedding.length === embedding.length)
     return {
       status: 'unknown',
       employeeId: null,
       confidenceScore: null,
       bestMatch: null,
       candidates: [],
-      reasons: templates.length === 0
+      reasons: !hasTemplates
         ? ['No approved face templates are enrolled for this company.']
+        : !hasCompatibleTemplates
+          ? [`No enrolled templates are compatible with the probe embedding dimension (${embedding.length}). Re-enrollment with a matching face engine is required.`]
         : [`No enrolled template is within the match distance threshold (${thresholds.matchDistanceThreshold}).`],
     }
   }
