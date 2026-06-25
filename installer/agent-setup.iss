@@ -6,7 +6,7 @@
 ;   /DSupabaseUrl=https://...
 ;   /DNodeVersion=20.x.x
 ;
-; Output: installer/output/AttendanceAI-Agent-Setup.exe
+; Output: installer/output/AttendanceAI-Agent-Setup-<version>.exe
 ; ============================================================================
 
 ; ── Build-time defines (overridden by /D flags from build-installer.ps1) ─────
@@ -18,7 +18,7 @@
   #define NodeVersion "20.18.0"
 #endif
 #define AppName    "AttendanceAI Local Agent"
-#define AppVersion "1.0.3"
+#define AppVersion "1.0.6"
 #define AppPublisher "AttendanceAI"
 #define ServiceName  "AttendanceAIAgent"
 
@@ -33,7 +33,7 @@ DefaultDirName={autopf}\AttendanceAI\Agent
 DefaultGroupName=AttendanceAI
 DisableProgramGroupPage=yes
 OutputDir=output
-OutputBaseFilename=AttendanceAI-Agent-Setup
+OutputBaseFilename=AttendanceAI-Agent-Setup-1.0.6-srt-webrtc
 Compression=lzma2/ultra64
 SolidCompression=yes
 PrivilegesRequired=admin
@@ -77,6 +77,10 @@ Source: "build\agent\node_modules\*"; DestDir: "{app}\node_modules"; \
 
 ; package.json
 Source: "build\agent\package.json"; DestDir: "{app}"; Flags: ignoreversion
+
+; Optional customer-side power recommendations helper. Installed but never run
+; automatically: customers/admins must opt in before changing Windows power settings.
+Source: "scripts\Set-AttendanceAIPowerRecommendations.ps1"; DestDir: "{app}\tools"; Flags: ignoreversion
 
 ; ── [Dirs] ────────────────────────────────────────────────────────────────────
 
@@ -165,6 +169,8 @@ begin
     'MEDIAMTX_RTSP_BASE=rtsp://91.98.80.25:8554' + #13#10 +
     'MEDIAMTX_HLS_PUBLIC_URL=https://attendanceai.duckdns.org/camera-hls' + #13#10 +
     'MEDIAMTX_RTSP_PUBLISH_URL=rtsp://91.98.80.25:8554' + #13#10 +
+    'SRT_PUBLISH_BASE_URL=srt://91.98.80.25:8890' + #13#10 +
+    'WEBRTC_PUBLIC_BASE_URL=https://attendanceai.duckdns.org/camera-webrtc' + #13#10 +
     'ENABLE_CLOUD_STREAM_MANAGER=false' + #13#10 +
     '' + #13#10 +
     '# Identity file stored in ProgramData so it survives reinstalls' + #13#10 +
@@ -186,10 +192,63 @@ begin
   Exec(NssmPath, 'remove {#ServiceName} confirm', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
+// Runs before file extraction. This is required for upgrades: Inno copies files
+// before ssPostInstall, so node.exe/mediamtx.exe can be locked by the existing
+// AttendanceAIAgent service unless we stop it here.
+procedure StopExistingServiceBeforeCopy();
+var
+  NssmPath:     String;
+  ScPath:       String;
+  PowerShell:   String;
+  AppDir:       String;
+  KillCommand:  String;
+  ResultCode:   Integer;
+begin
+  NssmPath   := ExpandConstant('{app}') + '\bin\nssm.exe';
+  ScPath     := ExpandConstant('{sys}') + '\sc.exe';
+  PowerShell := ExpandConstant('{sys}') + '\WindowsPowerShell\v1.0\powershell.exe';
+  AppDir     := ExpandConstant('{app}');
+
+  if FileExists(NssmPath) then
+  begin
+    Exec(NssmPath, 'stop {#ServiceName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(NssmPath, 'remove {#ServiceName} confirm', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end
+  else
+  begin
+    Exec(ScPath, 'stop {#ServiceName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(ScPath, 'delete {#ServiceName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
+
+  // Best-effort scoped cleanup only. Do not kill system-wide node/ffmpeg; kill
+  // only child/helper processes whose executable path is inside {app}.
+  if FileExists(PowerShell) then
+  begin
+    KillCommand :=
+      '$root = ''' + AppDir + '''; ' +
+      'Get-CimInstance Win32_Process | Where-Object { ' +
+      '$_.ExecutablePath -and ' +
+      '$_.ExecutablePath.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase) -and ' +
+      '@(''node.exe'',''mediamtx.exe'',''ffmpeg.exe'') -contains $_.Name ' +
+      '} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }';
+
+    Exec(PowerShell,
+      '-NoProfile -ExecutionPolicy Bypass -Command "' + KillCommand + '"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  StopExistingServiceBeforeCopy();
+  Result := '';
+end;
+
 procedure InstallService();
 var
   NssmPath:   String;
   NodePath:   String;
+  ScPath:     String;
   AppDir:     String;
   DataDir:    String;
   LogOut:     String;
@@ -198,6 +257,7 @@ var
 begin
   NssmPath := ExpandConstant('{app}') + '\bin\nssm.exe';
   NodePath := ExpandConstant('{app}') + '\runtime\node.exe';
+  ScPath   := ExpandConstant('{sys}') + '\sc.exe';
   AppDir   := ExpandConstant('{app}');
   DataDir  := ExpandConstant('{commonappdata}') + '\AttendanceAI\Agent';
   LogOut   := DataDir + '\logs\agent.log';
@@ -230,6 +290,19 @@ begin
     '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec(NssmPath,
     'set {#ServiceName} AppThrottle 30000',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+  // Windows Service Control Manager recovery for the service wrapper itself.
+  // NSSM restarts node.exe; SCM recovery restarts NSSM if the wrapper service
+  // fails. Delayed auto start gives networking a short head start after boot.
+  Exec(ScPath,
+    'config {#ServiceName} start= delayed-auto',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ScPath,
+    'failure {#ServiceName} reset= 86400 actions= restart/60000/restart/60000/restart/300000',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ScPath,
+    'failureflag {#ServiceName} 1',
     '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
   // Redirect stdout + stderr to log files; rotate at 10 MB

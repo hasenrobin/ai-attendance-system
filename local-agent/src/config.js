@@ -89,6 +89,8 @@ export const MEDIAMTX_API_BASE = optional('MEDIAMTX_API_BASE', 'http://127.0.0.1
 export const MEDIAMTX_HLS_BASE = optional('MEDIAMTX_HLS_BASE', 'http://localhost:8888')
 export const MEDIAMTX_HLS_PUBLIC_URL_LOCAL = optional('MEDIAMTX_HLS_PUBLIC_URL', MEDIAMTX_HLS_BASE)
 export const MEDIAMTX_RTSP_BASE = optional('MEDIAMTX_RTSP_BASE', 'rtsp://localhost:8554')
+export const SRT_PUBLISH_BASE_URL = optional('SRT_PUBLISH_BASE_URL', '')
+export const WEBRTC_PUBLIC_BASE_URL = optional('WEBRTC_PUBLIC_BASE_URL', '')
 
 // True when MEDIAMTX_RTSP_BASE points to a remote host, not localhost/127.0.0.1.
 // In cloud mode the pipeline skips the local MediaMTX API and YAML (cloud accepts
@@ -130,6 +132,16 @@ export const MEDIAMTX_RTSP_PUBLISH_URL = optional('MEDIAMTX_RTSP_PUBLISH_URL', '
 // Stored in cameras.live_stream_url so the browser can play the stream.
 // Example: MEDIAMTX_HLS_PUBLIC_URL=http://your-cloud-server/camera-hls
 export const MEDIAMTX_HLS_PUBLIC_URL = optional('MEDIAMTX_HLS_PUBLIC_URL', '')
+
+// Primary production streaming path:
+// RTSP camera -> Agent ffmpeg -> SRT cloud ingest -> MediaMTX -> WebRTC browser.
+// If SRT_PUBLISH_BASE_URL is empty, the agent falls back to the existing RTSP
+// publish path. Example: SRT_PUBLISH_BASE_URL=srt://91.98.80.25:8890
+export const MEDIAMTX_SRT_PUBLISH_URL = optional('MEDIAMTX_SRT_PUBLISH_URL', SRT_PUBLISH_BASE_URL)
+
+// Public WebRTC/WHEP base URL stored as cameras.live_stream_url when SRT is
+// used. Example: WEBRTC_PUBLIC_BASE_URL=https://attendanceai.duckdns.org/camera-webrtc
+export const MEDIAMTX_WEBRTC_PUBLIC_URL = optional('MEDIAMTX_WEBRTC_PUBLIC_URL', WEBRTC_PUBLIC_BASE_URL)
 
 // Path to the ffmpeg binary on the agent machine.
 // On Linux: 'ffmpeg' (system install).  On Windows: full path to ffmpeg.exe.

@@ -1190,6 +1190,10 @@ export const ar: TranslationDict = {
       openExternal: 'فتح في تبويب جديد',
       status: {
         connecting: 'جارٍ الاتصال',
+        live_webrtc: 'بث WebRTC مباشر',
+        falling_back_hls: 'التحول إلى HLS',
+        live_hls: 'بث HLS مباشر',
+        reconnecting: 'إعادة الاتصال',
         online: 'متصل',
         offline: 'غير متصل',
         error: 'خطأ في البث',

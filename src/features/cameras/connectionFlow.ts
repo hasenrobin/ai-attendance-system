@@ -159,7 +159,7 @@ async function runDirectRtsp(cameraId: string, fields: ConnectionFields): Promis
       provisioning_result: 'ok',
       readiness_result: 'live_ready',
       error_reason: null,
-      patch: { stream_type: 'hls', live_stream_url: result.liveStreamUrl, connection_mode: 'direct_rtsp' },
+      patch: { stream_type: result.streamType, live_stream_url: result.liveStreamUrl, connection_mode: 'direct_rtsp' },
     }
   }
 
@@ -198,7 +198,7 @@ async function runOnvif(cameraId: string, fields: ConnectionFields): Promise<Flo
       provisioning_result: 'ok',
       readiness_result: 'live_ready',
       error_reason: null,
-      patch: { stream_type: 'hls', live_stream_url: result.liveStreamUrl, connection_mode: 'onvif' },
+      patch: { stream_type: result.streamType, live_stream_url: result.liveStreamUrl, connection_mode: 'onvif' },
       discovery,
     }
   }
@@ -279,7 +279,7 @@ async function runNvrChannel(cameraId: string, fields: ConnectionFields): Promis
       provisioning_result: 'ok',
       readiness_result: 'live_ready',
       error_reason: null,
-      patch: { stream_type: 'hls', live_stream_url: result.liveStreamUrl, connection_mode: 'nvr_dvr' },
+      patch: { stream_type: result.streamType, live_stream_url: result.liveStreamUrl, connection_mode: 'nvr_dvr' },
     }
   }
 

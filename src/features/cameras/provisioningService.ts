@@ -21,8 +21,11 @@ export type ProvisionResult =
       ok: true
       mode: string
       stage: 'done'
-      streamType: 'hls'
+      streamType: 'hls' | 'webrtc'
       liveStreamUrl: string
+      hlsFallbackUrl?: string | null
+      webrtcUrl?: string | null
+      publishTransport?: 'srt' | 'rtsp' | string
       transcoded: boolean
       videoCodec: string | null
       audioCodec: string | null
@@ -67,11 +70,10 @@ type ProvisionParams = {
   nvrChannel?: string
 }
 
-// Talks to the local camera-provisioning-agent (camera-proxy/provisioning-agent),
-// which validates the RTSP stream (direct, ONVIF-discovered, or NVR-channel-
-// resolved), detects its codec, creates/updates the MediaMTX path, and
-// verifies HLS playback. See that folder's README for the full contract and
-// stage taxonomy.
+// Talks to the Local Customer Agent provisioning API. The API contract is
+// intentionally the same as the earlier camera-proxy/provisioning-agent:
+// validate RTSP (direct, ONVIF-discovered, or NVR-channel-resolved), detect
+// codec, create/update the MediaMTX path, and verify HLS playback.
 export async function provisionCamera(params: ProvisionParams): Promise<ProvisionResult> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), PROVISION_TIMEOUT_MS)

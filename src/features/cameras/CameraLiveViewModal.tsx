@@ -18,7 +18,7 @@ type ViewState =
   | { kind: 'channels'; channels: Camera[] }
   | { kind: 'target'; target: CameraStreamTarget; channels: Camera[] | null }
 
-const DIRECT_STREAM_TYPES: ReadonlySet<string> = new Set(['hls', 'mjpeg', 'external_url'])
+const DIRECT_STREAM_TYPES: ReadonlySet<string> = new Set(['hls', 'webrtc', 'mjpeg', 'external_url'])
 
 // A camera is the root of an NVR/DVR system (and should show a channel list
 // rather than its own player) when it's in nvr_dvr mode with no parent.

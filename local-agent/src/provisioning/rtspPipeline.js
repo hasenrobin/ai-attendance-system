@@ -10,6 +10,8 @@ import {
   CLOUD_RTSP_MODE,
   FFMPEG_PATH,
   MEDIAMTX_RTSP_BASE,
+  SRT_PUBLISH_BASE_URL,
+  WEBRTC_PUBLIC_BASE_URL,
   buildTranscodeArgs,
   buildPassthroughArgs,
 } from './config.js'
@@ -39,6 +41,21 @@ export function redactedErrorMessage(err, rtspUrlWithCreds) {
 //              Passthrough (-c copy) is used for H.264; full transcode for HEVC.
 
 const _transcodeProcs = new Map() // pathName → ChildProcess
+
+function joinBaseUrl(base, pathName) {
+  return `${base.replace(/\/+$/, '')}/${pathName}`
+}
+
+function srtPublishUrlFor(pathName) {
+  if (!SRT_PUBLISH_BASE_URL) return ''
+  const separator = SRT_PUBLISH_BASE_URL.includes('?') ? '&' : '?'
+  return `${SRT_PUBLISH_BASE_URL}${separator}streamid=publish:${pathName}&pkt_size=1316`
+}
+
+function webrtcUrlFor(pathName) {
+  if (!WEBRTC_PUBLIC_BASE_URL) return null
+  return `${joinBaseUrl(WEBRTC_PUBLIC_BASE_URL, pathName)}/whep`
+}
 
 function spawnFfmpegProcess(rtspUrlWithCreds, pathName, useTranscode) {
   const prev = _transcodeProcs.get(pathName)
@@ -105,6 +122,8 @@ export async function runRtspPipeline({ cameraId, rtspUrlWithCreds }) {
   console.log(`[pipeline] url        = ${redact(rtspUrlWithCreds ?? 'null')}`)
   console.log(`[pipeline] cloudMode  = ${CLOUD_RTSP_MODE}`)
   console.log(`[pipeline] rtspTarget = ${MEDIAMTX_RTSP_BASE}`)
+  console.log(`[pipeline] srtTarget  = ${SRT_PUBLISH_BASE_URL || 'disabled'}`)
+  console.log(`[pipeline] webrtcBase = ${WEBRTC_PUBLIC_BASE_URL || 'disabled'}`)
 
   if (!rtspUrlWithCreds) {
     const err = 'RTSP URL is null or empty — camera.rtsp_url was not set in the database'
@@ -124,6 +143,7 @@ export async function runRtspPipeline({ cameraId, rtspUrlWithCreds }) {
   }
 
   const transcode = decideTranscode(probe)
+  const useSrtPrimary = Boolean(SRT_PUBLISH_BASE_URL && WEBRTC_PUBLIC_BASE_URL)
   console.log(`[pipeline] ffprobe OK. videoCodec=${probe.videoCodec} audioCodec=${probe.audioCodec} transcode=${transcode}`)
 
   // ── Stage 2: MediaMTX API + YAML (LOCAL mode only) ───────────────────────────
@@ -134,9 +154,9 @@ export async function runRtspPipeline({ cameraId, rtspUrlWithCreds }) {
   //
   // LOCAL mode: configure the local MediaMTX path and persist to YAML so the
   // path survives a MediaMTX restart (runOnInit fires from YAML at startup).
-  console.log(`[pipeline] Stage 2/3: MediaMTX  cloud=${CLOUD_RTSP_MODE} transcode=${transcode}`)
+  console.log(`[pipeline] Stage 2/3: MediaMTX  cloud=${CLOUD_RTSP_MODE} srtPrimary=${useSrtPrimary} transcode=${transcode}`)
 
-  if (CLOUD_RTSP_MODE) {
+  if (CLOUD_RTSP_MODE || useSrtPrimary) {
     console.log(`[pipeline] CLOUD MODE — local MediaMTX API + YAML skipped`)
     console.log(`[pipeline] ffmpeg will publish to: ${MEDIAMTX_RTSP_BASE}/${pathName}`)
   } else {
@@ -175,43 +195,82 @@ export async function runRtspPipeline({ cameraId, rtspUrlWithCreds }) {
   //   - Cloud MediaMTX cannot reach cameras on private LAN IPs
   //   - ffmpeg reads locally and publishes to cloud RTSP
   //   - H.264 cameras use -c copy (no CPU overhead); HEVC uses libx264 transcode
-  const needsFfmpegPush = transcode || CLOUD_RTSP_MODE
+  const needsFfmpegPush = transcode || CLOUD_RTSP_MODE || useSrtPrimary
+  const hlsFallbackUrl = liveStreamUrlFor(pathName)
+  const primaryWebRtcUrl = webrtcUrlFor(pathName)
 
-  if (needsFfmpegPush) {
-    const waitMs = CLOUD_RTSP_MODE ? 5000 : 3000
-    registerManagedStream({
-      cameraId,
-      pathName,
-      rtspUrlWithCreds,
-      publishUrl: `${MEDIAMTX_RTSP_BASE}/${pathName}`,
-      hlsUrl: liveStreamUrlFor(pathName),
-      useTranscode: transcode,
-    })
-    console.log(`[pipeline] Waiting ${waitMs}ms for ffmpeg to connect and produce first frames...`)
-    await new Promise(r => setTimeout(r, waitMs))
+  async function publishAndVerify(transport) {
+    if (needsFfmpegPush) {
+      const waitMs = (CLOUD_RTSP_MODE || transport === 'srt') ? 5000 : 3000
+      const rtspFallbackUrl = `${MEDIAMTX_RTSP_BASE}/${pathName}`
+      const srtPublishUrl = srtPublishUrlFor(pathName)
+      registerManagedStream({
+        cameraId,
+        pathName,
+        rtspUrlWithCreds,
+        publishTransport: transport,
+        publishUrl: transport === 'srt' ? srtPublishUrl : rtspFallbackUrl,
+        srtPublishUrl,
+        rtspFallbackUrl,
+        hlsUrl: hlsFallbackUrl,
+        webrtcUrl: primaryWebRtcUrl,
+        useTranscode: transcode,
+      })
+      console.log(`[pipeline] Waiting ${waitMs}ms for ffmpeg transport=${transport} to connect and produce first frames...`)
+      await new Promise(r => setTimeout(r, waitMs))
+    }
+
+    console.log('[pipeline] Stage 3/3: HLS fallback verify')
+    const verifiedHlsUrl = await waitForHls(pathName)
+    console.log(`[pipeline] HLS fallback OK. hlsUrl=${verifiedHlsUrl}`)
+    return verifiedHlsUrl
+  }
+
+  let liveStreamUrl
+  let selectedTransport = useSrtPrimary ? 'srt' : 'rtsp'
+
+  try {
+    liveStreamUrl = await publishAndVerify(selectedTransport)
+  } catch (err) {
+    if (!useSrtPrimary) {
+      if (needsFfmpegPush) unregisterManagedStream(pathName, 'initial_hls_verify_failed')
+      console.error(`[pipeline] FAIL stage=hls_verify : ${err.message}`)
+      return { ok: false, stage: 'hls_verify', error: err.message, rtspUrlWithCreds, warnings }
+    }
+
+    warnings.push(`SRT publish did not produce verified HLS fallback; trying RTSP fallback: ${err.message}`)
+    console.warn(`[pipeline] SRT primary failed verification; trying RTSP fallback. reason=${err.message}`)
+    unregisterManagedStream(pathName, 'srt_initial_verify_failed')
+
+    selectedTransport = 'rtsp'
+    try {
+      liveStreamUrl = await publishAndVerify('rtsp')
+    } catch (fallbackErr) {
+      if (needsFfmpegPush) unregisterManagedStream(pathName, 'rtsp_fallback_hls_verify_failed')
+      console.error(`[pipeline] FAIL stage=hls_verify : ${fallbackErr.message}`)
+      return { ok: false, stage: 'hls_verify', error: fallbackErr.message, rtspUrlWithCreds, warnings }
+    }
   }
 
   // ── Stage 3: HLS verification ─────────────────────────────────────────────────
-  console.log('[pipeline] Stage 3/3: HLS verify')
-  let liveStreamUrl
-  try {
-    liveStreamUrl = await waitForHls(pathName)
-    console.log(`[pipeline] HLS OK. liveStreamUrl=${liveStreamUrl}`)
-  } catch (err) {
-    if (needsFfmpegPush) unregisterManagedStream(pathName, 'initial_hls_verify_failed')
-    console.error(`[pipeline] FAIL stage=hls_verify : ${err.message}`)
-    return { ok: false, stage: 'hls_verify', error: err.message, rtspUrlWithCreds, warnings }
-  }
+  const streamType = selectedTransport === 'srt' && primaryWebRtcUrl ? 'webrtc' : 'hls'
+  const primaryLiveStreamUrl = streamType === 'webrtc' && primaryWebRtcUrl ? primaryWebRtcUrl : liveStreamUrl
 
-  console.log(`[pipeline] ALL STAGES PASSED. streamType=hls transcoded=${transcode} cloud=${CLOUD_RTSP_MODE}`)
+  console.log(
+    `[pipeline] ALL STAGES PASSED. streamType=${streamType} transport=${selectedTransport} ` +
+    `liveStreamUrl=${primaryLiveStreamUrl} hlsFallback=${liveStreamUrl}`,
+  )
   return {
     ok:           true,
     stage:        'done',
-    streamType:   'hls',
-    liveStreamUrl,
-    transcoded:   transcode,
+    streamType,
+    liveStreamUrl: primaryLiveStreamUrl,
+    hlsFallbackUrl: liveStreamUrl,
+    webrtcUrl: primaryWebRtcUrl,
+    publishTransport: selectedTransport,
+    transcoded:   selectedTransport === 'srt' ? true : transcode,
     videoCodec:   probe.videoCodec,
-    audioCodec:   probe.audioCodec,
+    audioCodec:   selectedTransport === 'srt' ? null : probe.audioCodec,
     warnings,
     rtspUrlWithCreds,
   }

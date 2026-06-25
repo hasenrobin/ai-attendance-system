@@ -1,6 +1,6 @@
 ###############################################
 # AttendanceAI camera proxy config — Production (Linux)
-# RTSP cameras publish here; MediaMTX serves HLS on :8888.
+# RTSP/SRT cameras publish here; MediaMTX serves WebRTC + HLS fallback.
 # Camera paths are created dynamically by the provisioning-agent via the API.
 
 logLevel: info
@@ -12,9 +12,14 @@ rtcpAddress: ':8001'
 hls: yes
 hlsAddress: ':8888'
 
-webrtc: no
+webrtc: yes
+webrtcAddress: ':8889'
+webrtcLocalUDPAddress: ':8189'
+webrtcAdditionalHosts: [91.98.80.25, attendanceai.duckdns.org]
+
 rtmp: no
-srt: no
+srt: yes
+srtAddress: ':8890'
 
 api: yes
 apiAddress: '127.0.0.1:9997'

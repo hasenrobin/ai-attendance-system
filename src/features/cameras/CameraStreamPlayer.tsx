@@ -2,9 +2,17 @@ import { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
 import './cameraLiveView.css'
 
-export type StreamPlayerStatus = 'connecting' | 'online' | 'offline' | 'error'
+export type StreamPlayerStatus =
+  | 'connecting'
+  | 'live_webrtc'
+  | 'falling_back_hls'
+  | 'live_hls'
+  | 'reconnecting'
+  | 'online'
+  | 'offline'
+  | 'error'
 
-export type DirectStreamType = 'hls' | 'mjpeg' | 'external_url'
+export type DirectStreamType = 'hls' | 'webrtc' | 'mjpeg' | 'external_url'
 
 type CameraStreamPlayerProps = {
   streamType: DirectStreamType
@@ -14,6 +22,7 @@ type CameraStreamPlayerProps = {
 
 const EMBEDDABLE_URL_EXTENSIONS = /\.(mp4|webm|ogg|m3u8|mov)(\?.*)?$/i
 const HLS_URL_EXTENSION = /\.m3u8(\?.*)?$/i
+const WHEP_URL_EXTENSION = /\/whep(\?.*)?$/i
 
 function getUrlScheme(url: string): string | null {
   const match = url.trim().match(/^([a-z][a-z0-9+.-]*):\/\//i)
@@ -84,6 +93,10 @@ export function CameraStreamPlayer({ streamType, liveStreamUrl, onStatus }: Came
     return <UnsupportedStreamMessage onStatus={onStatus} />
   }
 
+  if (streamType === 'webrtc' || WHEP_URL_EXTENSION.test(liveStreamUrl)) {
+    return <WebRtcPlayerWithFallback url={liveStreamUrl} onStatus={onStatus} />
+  }
+
   if (streamType === 'hls' || HLS_URL_EXTENSION.test(liveStreamUrl)) {
     return <HlsPlayer url={liveStreamUrl} onStatus={onStatus} />
   }
@@ -96,6 +109,155 @@ export function CameraStreamPlayer({ streamType, liveStreamUrl, onStatus }: Came
 }
 
 type SubPlayerProps = { url: string; onStatus: (status: StreamPlayerStatus) => void }
+
+function hlsFallbackUrlForWebRtc(whepUrl: string): string | null {
+  try {
+    const url = new URL(whepUrl)
+    const parts = url.pathname.split('/').filter(Boolean)
+    const webrtcIndex = parts.indexOf('camera-webrtc')
+    if (webrtcIndex === -1 || !parts[webrtcIndex + 1]) return null
+    const pathName = parts[webrtcIndex + 1]
+    url.pathname = `/camera-hls/${pathName}/index.m3u8`
+    url.search = ''
+    return url.toString()
+  } catch {
+    return null
+  }
+}
+
+function waitForIceGatheringComplete(pc: RTCPeerConnection): Promise<void> {
+  if (pc.iceGatheringState === 'complete') return Promise.resolve()
+  return new Promise(resolve => {
+    const timeout = window.setTimeout(done, 2500)
+    function done() {
+      window.clearTimeout(timeout)
+      pc.removeEventListener('icegatheringstatechange', handleChange)
+      resolve()
+    }
+    function handleChange() {
+      if (pc.iceGatheringState === 'complete') done()
+    }
+    pc.addEventListener('icegatheringstatechange', handleChange)
+  })
+}
+
+function WebRtcPlayerWithFallback({ url, onStatus }: SubPlayerProps) {
+  const [fallbackUrl, setFallbackUrl] = useState<string | null | undefined>(undefined)
+
+  if (fallbackUrl) {
+    return <HlsPlayer url={fallbackUrl} onStatus={status => {
+      if (status === 'online') onStatus('live_hls')
+      else if (status === 'connecting') onStatus('falling_back_hls')
+      else onStatus(status)
+    }} />
+  }
+
+  if (fallbackUrl === null) {
+    return <UnsupportedHlsMessage onStatus={onStatus} />
+  }
+
+  return <WebRtcPlayer url={url} onStatus={onStatus} onFallback={() => setFallbackUrl(hlsFallbackUrlForWebRtc(url))} />
+}
+
+function WebRtcPlayer({ url, onStatus, onFallback }: SubPlayerProps & { onFallback: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    let pc: RTCPeerConnection | null = null
+
+    async function connect() {
+      const video = videoRef.current
+      if (!video) return
+
+      if (isMixedContent(url)) {
+        onStatus('falling_back_hls')
+        onFallback()
+        return
+      }
+
+      onStatus('connecting')
+      pc = new RTCPeerConnection()
+      const remoteStream = new MediaStream()
+      video.srcObject = remoteStream
+
+      pc.addTransceiver('video', { direction: 'recvonly' })
+      pc.addTransceiver('audio', { direction: 'recvonly' })
+
+      pc.ontrack = event => {
+        for (const track of event.streams[0]?.getTracks() ?? [event.track]) {
+          if (!remoteStream.getTracks().some(existing => existing.id === track.id)) {
+            remoteStream.addTrack(track)
+          }
+        }
+      }
+
+      pc.onconnectionstatechange = () => {
+        if (!pc || cancelled) return
+        if (pc.connectionState === 'connected') onStatus('live_webrtc')
+        else if (pc.connectionState === 'connecting') onStatus('connecting')
+        else if (pc.connectionState === 'disconnected') onStatus('reconnecting')
+        else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+          onStatus('falling_back_hls')
+          onFallback()
+        }
+      }
+
+      const offer = await pc.createOffer()
+      await pc.setLocalDescription(offer)
+      await waitForIceGatheringComplete(pc)
+      if (cancelled || !pc.localDescription) return
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/sdp',
+          'Accept': 'application/sdp',
+        },
+        body: pc.localDescription.sdp,
+      })
+
+      if (!response.ok) {
+        throw new Error(`WHEP handshake failed with HTTP ${response.status}`)
+      }
+
+      const answer = await response.text()
+      if (cancelled) return
+      await pc.setRemoteDescription({ type: 'answer', sdp: answer })
+      void video.play().catch(() => undefined)
+    }
+
+    connect().catch(() => {
+      if (!cancelled) {
+        onStatus('falling_back_hls')
+        onFallback()
+      }
+    })
+
+    return () => {
+      cancelled = true
+      pc?.close()
+      const video = videoRef.current
+      if (video) {
+        video.srcObject = null
+        video.removeAttribute('src')
+        video.load()
+      }
+    }
+  }, [url, onStatus, onFallback])
+
+  return (
+    <video
+      key={url}
+      ref={videoRef}
+      className="clv-media clv-media--video"
+      controls
+      autoPlay
+      muted
+      playsInline
+    />
+  )
+}
 
 function MjpegPlayer({ url, onStatus }: SubPlayerProps) {
   useEffect(() => {

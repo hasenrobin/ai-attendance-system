@@ -1188,6 +1188,10 @@ export const en = {
       openExternal: 'Open in New Tab',
       status: {
         connecting: 'Connecting',
+        live_webrtc: 'Live WebRTC',
+        falling_back_hls: 'Falling back to HLS',
+        live_hls: 'Live HLS',
+        reconnecting: 'Reconnecting',
         online: 'Online',
         offline: 'Offline',
         error: 'Stream Error',

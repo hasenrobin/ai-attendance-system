@@ -8,7 +8,7 @@ import { checkCloudHealth, type CloudAdapterResult, type CloudCredentialVendor, 
 // IMPORTANT:
 // The browser cannot fetch rtsp:// URLs. RTSP must be checked/converted by a backend
 // adapter such as FFmpeg / MediaMTX, then the browser should receive HTTP HLS (.m3u8).
-export const MONITORED_STREAM_TYPES: ReadonlySet<string> = new Set(['hls', 'mjpeg', 'external_url'])
+export const MONITORED_STREAM_TYPES: ReadonlySet<string> = new Set(['hls', 'webrtc', 'mjpeg', 'external_url'])
 
 const CHECK_TIMEOUT_MS = 6000
 const OFFLINE_THRESHOLD = 2
@@ -40,9 +40,30 @@ export function isBrowserMonitorableStreamUrl(streamType: string, url: string): 
   return true
 }
 
+function hlsFallbackUrlForWebRtc(whepUrl: string): string | null {
+  try {
+    const url = new URL(whepUrl)
+    const parts = url.pathname.split('/').filter(Boolean)
+    const webrtcIndex = parts.indexOf('camera-webrtc')
+    if (webrtcIndex === -1 || !parts[webrtcIndex + 1]) return null
+    const pathName = parts[webrtcIndex + 1]
+    url.pathname = `/camera-hls/${pathName}/index.m3u8`
+    url.search = ''
+    return url.toString()
+  } catch {
+    return null
+  }
+}
+
 export async function checkStreamReachable(streamType: string, url: string): Promise<StreamCheckResult> {
   if (!isBrowserMonitorableStreamUrl(streamType, url)) {
     return { reachable: false, reason: 'unsupported_browser_stream_url' }
+  }
+
+  if (streamType === 'webrtc') {
+    const hlsFallbackUrl = hlsFallbackUrlForWebRtc(url)
+    if (!hlsFallbackUrl) return { reachable: false, reason: 'missing_hls_fallback_url' }
+    return checkStreamReachable('hls', hlsFallbackUrl)
   }
 
   const controller = new AbortController()
