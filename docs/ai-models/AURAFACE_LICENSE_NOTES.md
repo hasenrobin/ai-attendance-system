@@ -18,68 +18,84 @@ face recognition model used in this platform under `FACE_ENGINE=auraface`.
 
 ---
 
-## Why AuraFace Was Chosen
+## Why AuraFace Was Selected Over InsightFace Models
 
 This platform previously evaluated InsightFace models (SCRFD detector + ArcFace
 buffalo_l/buffalo_s embedder). InsightFace's model zoo README explicitly restricts
-use to "non-commercial research purposes only," making those models unsuitable as
-the primary path for a commercial enterprise attendance platform.
+use to "non-commercial research purposes only." That explicit restriction makes
+those models unsuitable without a separate commercial license agreement.
 
-AuraFace-v1 is published under Apache-2.0, which explicitly permits:
+The `fal/AuraFace-v1` repository is licensed under Apache-2.0. The Apache-2.0
+license, as applied to the published repository artifacts, explicitly permits:
 
 - **Commercial use** ✓
 - **Distribution** ✓
 - **Modification** ✓
 - **Private use** ✓
 
-FAL.AI has positioned AuraFace as a commercially-friendly alternative to
-InsightFace models. Their public communications describe it as designed for
-production use in commercial face recognition applications.
+**Important:** The Apache-2.0 license covers the repository artifacts as published
+by FAL.AI. It does not independently resolve questions about the licensing of the
+training data used to produce those artifacts. That review is a separate step
+required before commercial production deployment. See "Remaining Legal Risks" below.
 
-The SCRFD detector (public/models/onnx/scrfd.onnx) continues to come from
-InsightFace and retains the non-commercial research restriction. The SCRFD model
+The SCRFD detector bundled in the AuraFace repository (`scrfd_10g_bnkps.onnx`) is
+also distributed under the same Apache-2.0 license declaration. The SCRFD model
 is used only for face detection and landmark output — it is not embedded in
-customer-facing biometric templates. Evaluate whether this is acceptable for
-your deployment. As an alternative, any ONNX-exported detector that outputs
-5-point facial landmarks can replace SCRFD without code changes.
+biometric identity templates. Evaluate SCRFD's provenance separately if required.
+Any ONNX detector that outputs 5-point facial landmarks can replace SCRFD without
+code changes.
 
 ---
 
-## License Evidence (Capture Date: 2026-06-24)
+## License Evidence (Verified: 2026-06-24)
 
-The following was verified at the time of integration:
+The following was confirmed at the time of integration:
 
 1. **HuggingFace model card license field:** `apache-2.0`  
    (visible at https://huggingface.co/fal/AuraFace-v1 under the "License" tag)
 
-2. **FAL.AI commercial positioning:** The model is described in FAL.AI's public
-   communications as a commercially-usable face recognition model.
+2. **HuggingFace API metadata:** `"license": "apache-2.0"` returned by the model
+   info API at https://huggingface.co/api/models/fal/AuraFace-v1
 
-3. **Apache-2.0 scope:** The license declaration on a HuggingFace model repository
-   applies to the model artifact (weights, configuration files) published in that
-   repository by the publisher (FAL.AI).
+3. **LICENSE.md in repository:** Contains the full Apache License 2.0 text.
+
+4. **Apache-2.0 scope:** The license declaration applies to the model artifacts
+   (weights, ONNX files, configuration) published by FAL.AI in this repository.
+   It does not constitute a warranty or legal clearance of the training data.
+
+**Note:** License declarations on HuggingFace can change. Re-verify the license
+field before any new major deployment. Screenshot or archive the model card if
+documentary evidence is required for compliance records.
 
 ---
 
 ## Remaining Legal Risks
 
-Apache-2.0 on the model weights is a significantly better position than InsightFace's
-explicit non-commercial restriction. However, the following risks remain and must be
-evaluated before large-scale commercial deployment:
+The following risks must be evaluated before commercial production deployment.
+They are separate from the Apache-2.0 repository license and are not resolved
+by it:
 
-### Risk 1 — Training Data Provenance (MEDIUM)
+### Risk 1 — Training Data Provenance (REQUIRED REVIEW)
 
-Apache-2.0 licenses the artifact FAL.AI is distributing. It does not independently
-license the training data used to train the model. If AuraFace was trained on
-academic datasets with non-commercial restrictions (VGGFace2, CASIA-WebFace,
-MS-Celeb-1M, WebFace600K), those datasets' terms may affect the model as a
-derivative work. International AI/IP law on this question is not settled as of 2025.
+The Apache-2.0 license applies to the repository artifacts as published by FAL.AI.
+It does not independently license the training data used to produce the model
+weights. The AuraFace-v1 model card describes the training data as "commercially
+and publicly available face images" but does not name specific datasets or provide
+dataset licenses. Until the training data is documented and reviewed, a definitive
+statement about commercial clearance cannot be made.
 
-**Action required before large-scale deployment:**
+If AuraFace weights were derived from academic datasets with non-commercial
+restrictions (VGGFace2, CASIA-WebFace, MS-Celeb-1M, WebFace600K), those datasets'
+terms may be relevant regardless of the repository's Apache-2.0 declaration.
+International AI/IP law on training data and model weight provenance is not settled
+as of 2025.
+
+**Action required before production deployment:**
 - Read the "Training Data" section of the AuraFace-v1 model card
-- If FAL.AI used a proprietary or permissively-licensed dataset, document it here
-- If the training data is restricted academic datasets, obtain a legal opinion on
-  whether the Apache-2.0 model license is sufficient for your jurisdiction
+- Contact FAL.AI to confirm the datasets used and their licensing terms
+- Document the confirmed training data in this file under a "Training Data Confirmed" section
+- If the training data cannot be confirmed as permissively licensed, obtain a legal
+  opinion before proceeding with commercial deployment
 
 ### Risk 2 — Biometric Data Regulation (SEPARATE FROM MODEL LICENSE)
 
@@ -204,17 +220,26 @@ degraded recognition accuracy.
 
 Before using `FACE_ENGINE=auraface` in production for paying customers:
 
-- [ ] Training data provenance confirmed and documented in this file
-- [ ] Legal review completed (or explicit business acceptance of remaining risk)
-- [ ] Biometric regulations assessed for target deployment countries
-- [ ] Normalization constants verified against model card
-- [ ] ONNX file SHA-256 checksum recorded in CHECKSUMS.sha256
-- [ ] Accuracy benchmarks run and FAR/FRR documented
-- [ ] Employee re-enrollment completed with auraface engine
-  (existing faceapi/arcface templates will not match auraface probes)
+**License and legal:**
+- [ ] AuraFace repository license (Apache-2.0) confirmed current on HuggingFace
+- [ ] Training data provenance confirmed with FAL.AI and documented in this file
+- [ ] Legal review or explicit written business decision recorded re: training data risk
+- [ ] Biometric data regulations assessed for all target deployment countries
+
+**Technical:**
+- [ ] Normalization constants verified against AuraFace-v1 model card
+- [ ] ONNX file SHA-256 checksums match `public/models/onnx/CHECKSUMS.sha256`
+- [ ] `node scripts/dev/verify-auraface.mjs` passes all checks
 - [ ] `/admin/face-debug` shows engine=auraface, model loaded, landmarks=yes
+- [ ] Accuracy benchmarks run; FAR and FRR documented at configured threshold
+
+**Data:**
+- [ ] Employee re-enrollment completed using the auraface engine
+  (existing faceapi/arcface templates will not match auraface probes)
 
 ---
 
-_Last updated: 2026-06-24. Re-verify HuggingFace model card license field before
-any new major deployment. License declarations can change if the model is updated._
+_Last updated: 2026-06-24. This document records what was known at the time of
+integration and what remains to be confirmed. It is not a legal clearance document.
+Re-verify the HuggingFace model card license field before any new major deployment;
+license declarations can change when a model is updated._

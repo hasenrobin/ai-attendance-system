@@ -43,9 +43,12 @@ export const ONNX_MODEL_PATHS = {
    *  Prefer auraface for commercial deployments. */
   embedder: 'models/onnx/arcface.onnx',
 
-  /** AuraFace-v1 embedder, 512-d output, Apache-2.0 licensed.
+  /** AuraFace-v1 embedder, 512-d output.
+   *  The repository (fal/AuraFace-v1) is licensed Apache-2.0, which permits
+   *  commercial use of the published artifacts. Training data provenance should
+   *  be reviewed before production deployment.
    *  Source: https://huggingface.co/fal/AuraFace-v1
-   *  See docs/ai-models/AURAFACE_LICENSE_NOTES.md before deploying commercially.
+   *  See docs/ai-models/AURAFACE_LICENSE_NOTES.md.
    *  Place the ONNX export at: public/models/onnx/auraface.onnx */
   auraface: 'models/onnx/auraface.onnx',
 } as const

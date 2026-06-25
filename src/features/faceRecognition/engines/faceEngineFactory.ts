@@ -14,8 +14,9 @@
 //                 Requires: scrfd.onnx + arcface.onnx
 //                 NOTE: InsightFace models are non-commercial research only.
 //
-//   auraface      SCRFD detector + AuraFace-v1 embedder (512-d, Apache-2.0).
-//                 Commercially-safe alternative to onnx_arcface.
+//   auraface      SCRFD detector + AuraFace-v1 embedder (512-d).
+//                 Repository licensed Apache-2.0 (permits commercial use of artifacts).
+//                 Training data provenance should be reviewed before production.
 //                 Requires: scrfd.onnx + auraface.onnx
 //                 See docs/ai-models/AURAFACE_LICENSE_NOTES.md.
 //
@@ -77,7 +78,8 @@ export async function createFaceEngines(
     }
 
     case 'auraface': {
-      // AuraFace-v1 (fal/AuraFace-v1, Apache-2.0) — commercially-positioned alternative.
+      // AuraFace-v1 (fal/AuraFace-v1) — Apache-2.0 licensed repository artifacts.
+      // Training data provenance should be reviewed before production deployment.
       // Shares the scrfd.onnx file with onnx_arcface, but the AuraFace pack bundles
       // scrfd_10g_bnkps.onnx (SCRFD-10G, 640×640 input) — not SCRFD-2.5G (320×320).
       // inputSize: 640 is mandatory for this detector variant.
@@ -98,7 +100,7 @@ export async function createFaceEngines(
     case 'insightface':
       throw new FaceEngineNotConfiguredError(
         'FACE_ENGINE=insightface is reserved for a future dedicated InsightFace backend and is not implemented yet. ' +
-        'Use FACE_ENGINE=faceapi (default, browser-only), FACE_ENGINE=auraface (Apache-2.0, commercial-friendly), ' +
+        'Use FACE_ENGINE=faceapi (default, browser-only), FACE_ENGINE=auraface (Apache-2.0 repository license — review training data before production), ' +
         'or FACE_ENGINE=onnx_arcface (InsightFace models, non-commercial research only).',
       )
 

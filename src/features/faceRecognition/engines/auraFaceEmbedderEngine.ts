@@ -1,9 +1,9 @@
-// AuraFace-v1 embedder engine (V2 Phase A — commercial-safe ArcFace-style 512-d encoder).
+// AuraFace-v1 embedder engine (V2 Phase A — ArcFace-style 512-d identity encoder).
 //
 // AuraFace-v1 is published by FAL.AI at https://huggingface.co/fal/AuraFace-v1
-// under the Apache-2.0 license. It is the primary commercially-positioned free
-// face recognition model in this platform. See docs/ai-models/AURAFACE_LICENSE_NOTES.md
-// before deploying to production customers.
+// under the Apache-2.0 license, which permits commercial use of the published
+// repository artifacts. Training data provenance should be reviewed before
+// production deployment — see docs/ai-models/AURAFACE_LICENSE_NOTES.md.
 //
 // ┌─ Required model file ───────────────────────────────────────────────────────┐
 // │  public/models/onnx/auraface.onnx                                           │

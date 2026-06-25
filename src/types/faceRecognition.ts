@@ -92,10 +92,11 @@ export interface FaceEmbedderEngine {
  *                   NOTE: InsightFace models have non-commercial research restrictions.
  *                   Use 'auraface' for commercial deployments.
  *
- *  'auraface'     — SCRFD-2.5G detector + AuraFace-v1 512-d embedder (fal/AuraFace-v1,
- *                   Apache-2.0 licensed). Commercially-friendly alternative to onnx_arcface.
+ *  'auraface'     — SCRFD-10G detector + AuraFace-v1 512-d embedder (fal/AuraFace-v1).
+ *                   The repository is licensed Apache-2.0 (permits commercial use of
+ *                   published artifacts). Training data provenance should be reviewed
+ *                   before production deployment — see AURAFACE_LICENSE_NOTES.md.
  *                   Requires public/models/onnx/scrfd.onnx + public/models/onnx/auraface.onnx.
- *                   See docs/ai-models/AURAFACE_LICENSE_NOTES.md.
  *
  *  'insightface'  — Reserved for a future dedicated InsightFace backend. Not implemented.
  *                   Always throws FaceEngineNotConfiguredError.
