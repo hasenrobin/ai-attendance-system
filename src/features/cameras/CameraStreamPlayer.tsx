@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
 import './cameraLiveView.css'
 
@@ -143,40 +143,63 @@ function waitForIceGatheringComplete(pc: RTCPeerConnection): Promise<void> {
 
 function WebRtcPlayerWithFallback({ url, onStatus }: SubPlayerProps) {
   const [fallbackUrl, setFallbackUrl] = useState<string | null | undefined>(undefined)
+  const handleFallback = useCallback(() => {
+    console.warn(`[webrtc-player] fallback trigger url=${url}`)
+    setFallbackUrl(hlsFallbackUrlForWebRtc(url))
+  }, [url])
+
+  const handleHlsFallbackStatus = useCallback((status: StreamPlayerStatus) => {
+    if (status === 'online') onStatus('live_hls')
+    else if (status === 'connecting') onStatus('falling_back_hls')
+    else onStatus(status)
+  }, [onStatus])
 
   if (fallbackUrl) {
-    return <HlsPlayer url={fallbackUrl} onStatus={status => {
-      if (status === 'online') onStatus('live_hls')
-      else if (status === 'connecting') onStatus('falling_back_hls')
-      else onStatus(status)
-    }} />
+    return <HlsPlayer url={fallbackUrl} onStatus={handleHlsFallbackStatus} />
   }
 
   if (fallbackUrl === null) {
     return <UnsupportedHlsMessage onStatus={onStatus} />
   }
 
-  return <WebRtcPlayer url={url} onStatus={onStatus} onFallback={() => setFallbackUrl(hlsFallbackUrlForWebRtc(url))} />
+  return <WebRtcPlayer url={url} onStatus={onStatus} onFallback={handleFallback} />
 }
 
 function WebRtcPlayer({ url, onStatus, onFallback }: SubPlayerProps & { onFallback: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const onStatusRef = useRef(onStatus)
+  const onFallbackRef = useRef(onFallback)
+
+  useEffect(() => {
+    onStatusRef.current = onStatus
+    onFallbackRef.current = onFallback
+  }, [onStatus, onFallback])
 
   useEffect(() => {
     let cancelled = false
     let pc: RTCPeerConnection | null = null
+
+    function setPlayerStatus(status: StreamPlayerStatus) {
+      onStatusRef.current(status)
+    }
+
+    function triggerFallback(reason: string) {
+      console.warn(`[webrtc-player] fallback reason=${reason} url=${url}`)
+      setPlayerStatus('falling_back_hls')
+      onFallbackRef.current()
+    }
 
     async function connect() {
       const video = videoRef.current
       if (!video) return
 
       if (isMixedContent(url)) {
-        onStatus('falling_back_hls')
-        onFallback()
+        triggerFallback('mixed_content')
         return
       }
 
-      onStatus('connecting')
+      console.log(`[webrtc-player] create peer connection url=${url}`)
+      setPlayerStatus('connecting')
       pc = new RTCPeerConnection()
       const remoteStream = new MediaStream()
       video.srcObject = remoteStream
@@ -194,12 +217,13 @@ function WebRtcPlayer({ url, onStatus, onFallback }: SubPlayerProps & { onFallba
 
       pc.onconnectionstatechange = () => {
         if (!pc || cancelled) return
-        if (pc.connectionState === 'connected') onStatus('live_webrtc')
-        else if (pc.connectionState === 'connecting') onStatus('connecting')
-        else if (pc.connectionState === 'disconnected') onStatus('reconnecting')
+        if (pc.connectionState === 'connected') {
+          console.log(`[webrtc-player] connected url=${url}`)
+          setPlayerStatus('live_webrtc')
+        } else if (pc.connectionState === 'connecting') setPlayerStatus('connecting')
+        else if (pc.connectionState === 'disconnected') setPlayerStatus('reconnecting')
         else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-          onStatus('falling_back_hls')
-          onFallback()
+          triggerFallback(`connection_${pc.connectionState}`)
         }
       }
 
@@ -229,13 +253,13 @@ function WebRtcPlayer({ url, onStatus, onFallback }: SubPlayerProps & { onFallba
 
     connect().catch(() => {
       if (!cancelled) {
-        onStatus('falling_back_hls')
-        onFallback()
+        triggerFallback('connect_error')
       }
     })
 
     return () => {
       cancelled = true
+      console.log(`[webrtc-player] teardown url=${url}`)
       pc?.close()
       const video = videoRef.current
       if (video) {
@@ -244,7 +268,7 @@ function WebRtcPlayer({ url, onStatus, onFallback }: SubPlayerProps & { onFallba
         video.load()
       }
     }
-  }, [url, onStatus, onFallback])
+  }, [url])
 
   return (
     <video
