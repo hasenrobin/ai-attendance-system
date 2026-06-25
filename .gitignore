@@ -38,10 +38,12 @@ installer/build/
 installer/output/
 
 # ONNX model files — large binary assets acquired separately per deployment.
-# Checksums (CHECKSUMS.sha256) are committed; the .onnx files themselves are not.
-# Acquisition: see docs/ai-models/AURAFACE_LICENSE_NOTES.md
-#   scrfd.onnx   — SCRFD-2.5G-bnkps detector (InsightFace model zoo)
-#   arcface.onnx — ArcFace R50 embedder (InsightFace, non-commercial research)
-#   auraface.onnx— AuraFace-v1 embedder (fal/AuraFace-v1, Apache-2.0)
-public/models/onnx/
+# CHECKSUMS.sha256 IS committed (records expected hashes + download URLs).
+# The .onnx binary files themselves are NOT committed.
+# Acquisition: see docs/ai-models/AURAFACE_LICENSE_NOTES.md and
+#              public/models/onnx/CHECKSUMS.sha256
+#   scrfd.onnx    — SCRFD-10G-bnkps detector  (fal/AuraFace-v1, Apache-2.0, 16.9 MB)
+#   auraface.onnx — AuraFace-v1 embedder      (fal/AuraFace-v1, Apache-2.0, 261 MB)
+#   arcface.onnx  — ArcFace R50 embedder      (InsightFace, non-commercial research)
+public/models/onnx/*.onnx
 

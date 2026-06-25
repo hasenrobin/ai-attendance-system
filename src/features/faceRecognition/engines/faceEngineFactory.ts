@@ -78,9 +78,11 @@ export async function createFaceEngines(
 
     case 'auraface': {
       // AuraFace-v1 (fal/AuraFace-v1, Apache-2.0) — commercially-positioned alternative.
-      // Shares the SCRFD detector with onnx_arcface (same scrfd.onnx model file).
+      // Shares the scrfd.onnx file with onnx_arcface, but the AuraFace pack bundles
+      // scrfd_10g_bnkps.onnx (SCRFD-10G, 640×640 input) — not SCRFD-2.5G (320×320).
+      // inputSize: 640 is mandatory for this detector variant.
       // See docs/ai-models/AURAFACE_LICENSE_NOTES.md before production deployment.
-      const scrfd = new ScrfdFaceDetectorEngine({ loadModelBytes: options.loadModelBytes })
+      const scrfd = new ScrfdFaceDetectorEngine({ loadModelBytes: options.loadModelBytes, inputSize: 640 })
       const auraface = new AuraFaceEmbedderEngine({ loadModelBytes: options.loadModelBytes })
       return {
         kind,
