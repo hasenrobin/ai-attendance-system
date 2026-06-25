@@ -64,24 +64,29 @@ export function CameraLiveViewModal({ camera, onClose }: CameraLiveViewModalProp
   const [status, setStatus] = useState<StreamPlayerStatus>('connecting')
   const targetIdRef = useRef<string | null>(null)
   const loggedRef = useRef<{ cameraId: string; status: StreamPlayerStatus } | null>(null)
+  const cameraId = camera?.id ?? null
 
   useEffect(() => {
-    if (!camera) return
+    if (!cameraId) return
     let cancelled = false
-    setState({ kind: 'loading' })
+    setState(previous =>
+      previous.kind === 'target' && previous.target.id === cameraId
+        ? previous
+        : { kind: 'loading' },
+    )
     setStatus('connecting')
     targetIdRef.current = null
     loggedRef.current = null
 
     async function load() {
-      const { data, error } = await getCameraStreamTarget(camera!.id)
+      const { data, error } = await getCameraStreamTarget(cameraId!)
       if (cancelled) return
       if (error || !data) {
-        setState({ kind: 'error', message: error ?? t('cameras.liveView.loadError') })
+        setState({ kind: 'error', message: error ?? 'Failed to load camera stream.' })
         return
       }
       if (isNvrRoot(data)) {
-        const { data: channels, error: channelsError } = await getCameraChannels(camera!.id)
+        const { data: channels, error: channelsError } = await getCameraChannels(cameraId!)
         if (cancelled) return
         if (channelsError) {
           setState({ kind: 'error', message: channelsError })
@@ -96,7 +101,7 @@ export function CameraLiveViewModal({ camera, onClose }: CameraLiveViewModalProp
 
     load()
     return () => { cancelled = true }
-  }, [camera, t])
+  }, [cameraId])
 
   const selectChannel = useCallback(async (channelId: string, channels: Camera[]) => {
     setState({ kind: 'loading' })
