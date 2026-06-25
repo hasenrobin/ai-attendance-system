@@ -119,10 +119,18 @@ async function testMissingModelError(): Promise<void> {
 
   try {
     await engines.detector.detect(frame)
-    check('detector.detect() throws when public/models/onnx/face_detector.onnx is missing', false, 'detect() resolved instead of throwing')
+    check('detector.detect() throws when public/models/onnx/scrfd.onnx is missing', false, 'detect() resolved instead of throwing')
   } catch (err) {
     check('detector.detect() throws FaceEngineNotConfiguredError', err instanceof FaceEngineNotConfiguredError, String(err))
-    check('error message says "Production model not configured"', err instanceof Error && err.message.includes('Production model not configured'), err instanceof Error ? err.message : String(err))
+    check(
+      'error message mentions missing SCRFD model',
+      err instanceof Error && (
+        err.message.includes('scrfd.onnx') ||
+        err.message.includes('SCRFD model not configured') ||
+        err.message.includes('Production model not configured')
+      ),
+      err instanceof Error ? err.message : String(err),
+    )
   }
 }
 

@@ -296,6 +296,12 @@ export function FaceRecognitionDebugPage() {
         templateEngines: [],
         templateDimensions: [],
         camera: { found: false, name: null, isAttendanceCamera: false, hasLiveStreamUrl: false, streamType: null, liveStreamUrl: null },
+        engineKind: null,
+        detectorModel: null,
+        embedderModel: null,
+        engineEmbeddingDimension: null,
+        engineHasLandmarks: null,
+        landmarksDetected: null,
         faceDetected: false,
         embeddingDimension: null,
         livenessPass: null,
@@ -490,6 +496,31 @@ export function FaceRecognitionDebugPage() {
                   </div>
                 )}
 
+                {/* Engine info (shown whenever engine was loaded, i.e. a frame was provided) */}
+                {report.engineKind && (
+                  <div style={{ ...S.infoGrid, marginTop: 'var(--space-3)', paddingBottom: 'var(--space-2)', borderBottom: '1px solid var(--color-border)' }}>
+                    <span style={S.infoKey}>Engine</span>
+                    <span style={S.infoVal}>{report.engineKind}</span>
+                    <span style={S.infoKey}>Detector</span>
+                    <span style={S.infoVal}>{report.detectorModel ?? '—'}</span>
+                    <span style={S.infoKey}>Embedder</span>
+                    <span style={S.infoVal}>{report.embedderModel ?? '—'}</span>
+                    <span style={S.infoKey}>Emb. dimension</span>
+                    <span style={S.infoVal}>{report.engineEmbeddingDimension ?? '—'}</span>
+                    <span style={S.infoKey}>Alignment</span>
+                    <span style={S.infoVal}>
+                      {report.engineHasLandmarks === null ? '—'
+                        : report.engineHasLandmarks ? '5-point affine (SCRFD landmarks)'
+                        : 'Box crop only (no landmarks)'}
+                    </span>
+                    <span style={S.infoKey}>Landmarks found</span>
+                    <span style={S.infoVal}>
+                      {report.landmarksDetected === null ? 'N/A'
+                        : report.landmarksDetected ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                )}
+
                 {/* Stats row */}
                 {(report.activeTemplateCount > 0 || report.enrolledEmployeeCount > 0) && (
                   <div style={{ ...S.infoGrid, marginTop: 'var(--space-3)' }}>
@@ -497,9 +528,9 @@ export function FaceRecognitionDebugPage() {
                     <span style={S.infoVal}>{report.enrolledEmployeeCount}</span>
                     <span style={S.infoKey}>Active templates</span>
                     <span style={S.infoVal}>{report.activeTemplateCount} (total in DB: {report.totalTemplateCount})</span>
-                    <span style={S.infoKey}>Engines</span>
+                    <span style={S.infoKey}>Template engines</span>
                     <span style={S.infoVal}>{report.templateEngines.join(', ') || 'none'}</span>
-                    <span style={S.infoKey}>Dimensions</span>
+                    <span style={S.infoKey}>Template dimensions</span>
                     <span style={S.infoVal}>{report.templateDimensions.join(', ') || 'none'}</span>
                     {report.bestMatch && <>
                       <span style={S.infoKey}>Best match</span>

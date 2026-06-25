@@ -54,6 +54,14 @@ export type FaceRecognitionDebugReport = {
     streamType: string | null
     liveStreamUrl: string | null
   }
+  // Engine capabilities (populated after engine init, when a frame is provided)
+  engineKind: string | null
+  detectorModel: string | null
+  embedderModel: string | null
+  engineEmbeddingDimension: number | null
+  engineHasLandmarks: boolean | null
+  /** True if at least one detected face included 5-point landmarks. */
+  landmarksDetected: boolean | null
   // Recognition results (populated only when a frame is provided)
   faceDetected: boolean
   embeddingDimension: number | null
@@ -126,6 +134,12 @@ export async function runFaceRecognitionDebug(
       streamType: null,
       liveStreamUrl: null,
     },
+    engineKind: null,
+    detectorModel: null,
+    embedderModel: null,
+    engineEmbeddingDimension: null,
+    engineHasLandmarks: null,
+    landmarksDetected: null,
     faceDetected: false,
     embeddingDimension: null,
     livenessPass: null,
@@ -262,7 +276,19 @@ export async function runFaceRecognitionDebug(
   let faceEngines: Awaited<ReturnType<typeof createFaceEngines>>
   try {
     faceEngines = await createFaceEngines()
-    steps.push(step('engine_init', 'Face engine loaded', 'pass', `Engine kind: ${faceEngines.kind}`))
+    report.engineKind = faceEngines.kind
+    report.detectorModel = faceEngines.detectorModel
+    report.embedderModel = faceEngines.embedderModel
+    report.engineEmbeddingDimension = faceEngines.embeddingDimension
+    report.engineHasLandmarks = faceEngines.hasLandmarks
+    const engineDetail = [
+      `kind=${faceEngines.kind}`,
+      `detector=${faceEngines.detectorModel}`,
+      `embedder=${faceEngines.embedderModel}`,
+      `dim=${faceEngines.embeddingDimension}`,
+      faceEngines.hasLandmarks ? 'landmarks=yes (5-point alignment enabled)' : 'landmarks=no (bounding-box crop only)',
+    ].join(' | ')
+    steps.push(step('engine_init', 'Face engine loaded', 'pass', engineDetail))
   } catch (err) {
     const msg = err instanceof FaceEngineNotConfiguredError
       ? err.message
@@ -330,7 +356,13 @@ export async function runFaceRecognitionDebug(
   report.recognitionEventId = best.recognitionEventId
   report.attendanceEventId = best.attendanceEventId
 
-  steps.push(step('face', 'Face detected in frame', 'pass', `${pipelineResult.results.length} face(s) detected. Using highest-confidence result.`))
+  // Landmark presence is determined by the engine's detector capability (V2 feature).
+  // CameraFrameProcessResult does not expose raw FaceDetection; we use the engine flag.
+  report.landmarksDetected = faceEngines.hasLandmarks
+
+  steps.push(step('face', 'Face detected in frame', 'pass',
+    `${pipelineResult.results.length} face(s) detected. Using highest-confidence result.` +
+    (faceEngines.hasLandmarks ? ' Landmarks present — alignment applied.' : ' No landmarks (bounding-box crop used).')))
 
   // Liveness
   if (best.liveness) {

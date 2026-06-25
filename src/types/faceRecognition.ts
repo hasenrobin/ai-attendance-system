@@ -21,10 +21,29 @@ export type FaceBox = {
   height: number
 }
 
+/**
+ * Five facial landmark points returned by SCRFD and other landmark-capable detectors.
+ * Order matches InsightFace convention: left-eye, right-eye, nose, left-mouth, right-mouth.
+ * Coordinates are in the original (unscaled) frame pixel space.
+ */
+export type FaceLandmarks5 = {
+  leftEye: { x: number; y: number }
+  rightEye: { x: number; y: number }
+  nose: { x: number; y: number }
+  leftMouth: { x: number; y: number }
+  rightMouth: { x: number; y: number }
+}
+
 export type FaceDetection = {
   box: FaceBox
   /** Detector confidence, 0-1. */
   score: number
+  /**
+   * Five facial landmarks, present only when the detector supports landmark output (e.g. SCRFD).
+   * When populated, embedders can perform 5-point affine alignment for higher accuracy.
+   * Absent for TinyFaceDetector / RFB-320 detectors.
+   */
+  landmarks?: FaceLandmarks5
 }
 
 /** A 128-d (or engine-specific length) face embedding for a single detected face. */
@@ -78,6 +97,14 @@ export type FaceEngines = {
   kind: FaceEngineKind
   detector: FaceDetectorEngine
   embedder: FaceEmbedderEngine
+  /** True when the detector outputs FaceLandmarks5 alongside each detection (enables affine alignment). */
+  hasLandmarks: boolean
+  /** Short name of the detector model, e.g. 'tiny_face_detector' or 'scrfd'. For debug/telemetry. */
+  detectorModel: string
+  /** Short name of the embedder model, e.g. 'face_recognition_model' or 'arcface'. For debug/telemetry. */
+  embedderModel: string
+  /** Dimension of embedding vectors produced by this engine: 128 (faceapi) or 512 (ArcFace). */
+  embeddingDimension: number
 }
 
 // ---------------------------------------------------------------------------
