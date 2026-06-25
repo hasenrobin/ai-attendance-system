@@ -4,6 +4,12 @@ import { LuxuryCard } from '../../components/ui/LuxuryCard'
 import { LuxuryButton } from '../../components/ui/LuxuryButton'
 import { LuxuryBadge } from '../../components/ui/LuxuryBadge'
 import { useFaceCapture } from './useFaceCapture'
+import {
+  captureEnrollmentEmbedding,
+  detectFaceForPreview,
+  releaseEnrollmentEngines,
+  type OnnxPoseHint,
+} from './engineCapture'
 import { ENROLLMENT_STEPS, APPROVAL_THRESHOLDS, isPoseStep } from './faceEnrollmentSteps'
 import {
   classifyPose,
@@ -13,6 +19,7 @@ import {
   getNoseRatio,
 } from './faceLiveness'
 import { FACEAPI_EMBEDDING_DIMENSION, FACEAPI_ENGINE_NAME, FACEAPI_MODEL_NAME } from './faceModels'
+import { resolveFaceEngineKind } from '../faceRecognition/faceRecognitionConfig'
 import {
   abandonEnrollmentSession,
   checkDuplicateFaceEnrollment,
@@ -21,6 +28,7 @@ import {
   rejectEnrollmentSession,
   type CompleteSessionTemplate,
 } from './faceEnrollmentService'
+import type { FaceDetection } from '../../types/faceRecognition'
 import type {
   EnrollmentWizardStage,
   FaceEnrollmentSession,
@@ -66,6 +74,10 @@ function hasCheck(quality: QualityCheckResult | null, id: string): boolean {
 export function FaceEnrollmentWizard({ mode, companyId, employeeId, employeeName, onDone }: FaceEnrollmentWizardProps) {
   const { t } = useI18n()
 
+  // Resolved once at mount — determines the capture path used throughout this session.
+  const [engineKind] = useState(() => resolveFaceEngineKind())
+  const isOnnxEngine = engineKind !== 'faceapi'
+
   const videoRef = useRef<HTMLVideoElement>(null)
   const [stage, setStage] = useState<EnrollmentWizardStage>('camera-check')
   const [stream, setStream] = useState<MediaStream | null>(null)
@@ -85,22 +97,24 @@ export function FaceEnrollmentWizard({ mode, companyId, employeeId, employeeName
   const earHistoryRef = useRef<number[]>([])
   const blinkDetectedRef = useRef(false)
   const templatesRef = useRef<CompleteSessionTemplate[]>([])
-  // Kept in parallel with templatesRef to supply the liveness descriptor-consistency check.
-  // captureDescriptor() returns Float32Array; we convert to number[] for storage but keep
-  // the raw typed array here so computeLivenessScore can run euclideanDistance across poses.
   const descriptorsRef = useRef<Partial<Record<PoseId, Float32Array>>>({})
   const profilePhotoRef = useRef<Blob | null>(null)
   const advancingRef = useRef(false)
   const stageRef = useRef(stage)
   const sessionRef = useRef(session)
 
+  // ONNX-path detection state (SCRFD, used when isOnnxEngine === true)
+  const onnxFaceRef = useRef<{ detection: FaceDetection; qualityOk: boolean; poseHint: OnnxPoseHint } | null>(null)
+  const [onnxFaceReady, setOnnxFaceReady] = useState(false)
+
   stageRef.current = stage
   sessionRef.current = session
 
   const active = stage === 'capture'
+  // faceapi capture hook — only active on the faceapi engine path
   const { modelsLoading, modelsError, detection, quality, captureDescriptor, captureProfilePhoto } = useFaceCapture(
     videoRef,
-    active,
+    active && !isOnnxEngine,
   )
 
   // ── Camera lifecycle ──────────────────────────────────────────
@@ -140,13 +154,38 @@ export function FaceEnrollmentWizard({ mode, companyId, employeeId, employeeName
   }, [stream])
 
   // Abandon an in-progress session if the wizard is closed mid-capture.
+  // Also release cached ONNX engine sessions so memory is freed.
   useEffect(() => {
     return () => {
       if (stageRef.current === 'capture' && sessionRef.current) {
         void abandonEnrollmentSession(sessionRef.current.id)
       }
+      releaseEnrollmentEngines()
     }
   }, [])
+
+  // ── ONNX detection loop (SCRFD preview at ~5fps, only when isOnnxEngine) ──
+
+  useEffect(() => {
+    if (!isOnnxEngine || stage !== 'capture') return
+    let rafId = 0
+    let lastRun = 0
+    const INTERVAL_MS = 200
+
+    const loop = (ts: number) => {
+      const video = videoRef.current
+      if (ts - lastRun >= INTERVAL_MS && video && video.readyState >= 2 && video.videoWidth > 0) {
+        lastRun = ts
+        void detectFaceForPreview(video).then(face => {
+          onnxFaceRef.current = face
+          setOnnxFaceReady(face?.qualityOk ?? false)
+        })
+      }
+      rafId = requestAnimationFrame(loop)
+    }
+    rafId = requestAnimationFrame(loop)
+    return () => { cancelAnimationFrame(rafId); onnxFaceRef.current = null }
+  }, [isOnnxEngine, stage])
 
   // Build/revoke a preview URL for the captured profile photo on completion.
   useEffect(() => {
@@ -159,9 +198,10 @@ export function FaceEnrollmentWizard({ mode, companyId, employeeId, employeeName
     return () => URL.revokeObjectURL(url)
   }, [stage])
 
-  // ── Guided step progression ───────────────────────────────────
+  // ── Guided step progression — faceapi path ────────────────────
 
   useEffect(() => {
+    if (isOnnxEngine) return  // ONNX path has its own effect below
     if (stage !== 'capture') return
     const step = ENROLLMENT_STEPS[stepIndex]
     if (!step) return
@@ -222,13 +262,12 @@ export function FaceEnrollmentWizard({ mode, companyId, employeeId, employeeName
             pose: step.id as PoseId,
             embedding: Array.from(descriptor),
             quality_score: quality.score,
-            // Derived from the actual descriptor length — not a hardcoded constant —
-            // so the stored metadata reflects the true output of the model.
             embedding_dimension: descriptor.length || FACEAPI_EMBEDDING_DIMENSION,
             embedding_engine: FACEAPI_ENGINE_NAME,
             embedding_model: FACEAPI_MODEL_NAME,
+            detector_model: 'tiny_face_detector',
+            alignment_used: false,
           })
-          // Keep the Float32Array for the liveness descriptor-consistency check.
           descriptorsRef.current[step.id as PoseId] = descriptor
         } else {
           reasons.push('Could not capture a face template for this position.')
@@ -260,7 +299,113 @@ export function FaceEnrollmentWizard({ mode, companyId, employeeId, employeeName
         setStepIndex((i) => i + 1)
       }
     })()
-  }, [detection, quality, stage, stepIndex, captureDescriptor, captureProfilePhoto])
+  }, [isOnnxEngine, detection, quality, stage, stepIndex, captureDescriptor, captureProfilePhoto])
+
+  // ── Guided step progression — ONNX path (SCRFD + AuraFace / ArcFace) ──────
+  // Simplified: no EAR blink, no 68-point pose classification.
+  // Pose steps: advance when SCRFD detects a face with sufficient quality.
+  // Blink step: auto-advance (SCRFD 5-point landmarks cannot compute EAR).
+
+  useEffect(() => {
+    if (!isOnnxEngine) return
+    if (stage !== 'capture') return
+    const step = ENROLLMENT_STEPS[stepIndex]
+    if (!step) return
+
+    const face = onnxFaceRef.current
+
+    // Blink step: auto-advance since SCRFD cannot compute EAR from 5 landmarks.
+    const conditionMet = step.id === 'blink'
+      ? true
+      : (face?.qualityOk ?? false)
+
+    if (!conditionMet) {
+      holdStartRef.current = null
+      setHoldProgress(0)
+      return
+    }
+
+    if (holdStartRef.current === null) holdStartRef.current = performance.now()
+    const elapsed = performance.now() - holdStartRef.current
+    // Blink step has holdMs=0 (instant); pose steps use their configured holdMs.
+    setHoldProgress(step.holdMs === 0 ? 1 : Math.min(1, elapsed / step.holdMs))
+
+    if (elapsed < step.holdMs || advancingRef.current) return
+    advancingRef.current = true
+
+    void (async () => {
+      const reasons: string[] = []
+      const qualityScore = face ? Math.round(face.detection.score * 100) : 0
+
+      if (step.id === 'blink') {
+        // Auto-advance: no blink detected via SCRFD but we don't block enrollment.
+        blinkDetectedRef.current = false
+      }
+
+      if (isPoseStep(step.id)) {
+        const video = videoRef.current
+        if (video) {
+          // Draw current video frame to a hidden canvas for captureEnrollmentEmbedding()
+          const canvas = document.createElement('canvas')
+          canvas.width = video.videoWidth
+          canvas.height = video.videoHeight
+          const ctx = canvas.getContext('2d')
+          if (ctx) {
+            ctx.drawImage(video, 0, 0)
+            const result = await captureEnrollmentEmbedding(canvas)
+            if (result) {
+              templatesRef.current.push({
+                pose: step.id as PoseId,
+                embedding: Array.from(result.descriptor),
+                quality_score: qualityScore,
+                embedding_dimension: result.embeddingDimension,
+                embedding_engine: result.embeddingEngine,
+                embedding_model: result.embeddingModel,
+                detector_model: result.detectorModel,
+                alignment_used: result.alignmentUsed,
+              })
+              descriptorsRef.current[step.id as PoseId] = result.descriptor
+            } else {
+              reasons.push('Could not capture a face embedding for this position.')
+            }
+          }
+        }
+      }
+
+      if (step.id === 'profile-photo') {
+        const video = videoRef.current
+        if (video) {
+          const canvas = document.createElement('canvas')
+          canvas.width = video.videoWidth
+          canvas.height = video.videoHeight
+          const ctx = canvas.getContext('2d')
+          if (ctx) {
+            ctx.drawImage(video, 0, 0)
+            const blob = await new Promise<Blob | null>(resolve =>
+              canvas.toBlob(b => resolve(b), 'image/jpeg', 0.92),
+            )
+            profilePhotoRef.current = blob
+            if (!blob) reasons.push('Could not capture the profile photo.')
+          }
+        }
+      }
+
+      setStepResults((prev) => [
+        ...prev,
+        { id: step.id, pass: reasons.length === 0, qualityScore, reasons, capturedAt: new Date().toISOString() },
+      ])
+
+      holdStartRef.current = null
+      setHoldProgress(0)
+      advancingRef.current = false
+
+      if (stepIndex + 1 >= ENROLLMENT_STEPS.length) {
+        setStage('processing')
+      } else {
+        setStepIndex((i) => i + 1)
+      }
+    })()
+  }, [isOnnxEngine, onnxFaceReady, stage, stepIndex])
 
   // ── Processing: the system's decision ───────────────────────────
 

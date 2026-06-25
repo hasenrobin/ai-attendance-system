@@ -62,6 +62,13 @@ export type FaceRecognitionDebugReport = {
   engineHasLandmarks: boolean | null
   /** True if at least one detected face included 5-point landmarks. */
   landmarksDetected: boolean | null
+  // Template compatibility (populated after engine init, cross-referencing active templates vs engine)
+  /** Templates whose embedding_engine matches the active engine — usable for recognition. */
+  compatibleTemplateCount: number | null
+  /** Templates skipped because their embedding_engine differs from the active engine. */
+  incompatibleTemplateCount: number | null
+  /** Engine names of the incompatible templates (for operator diagnosis). */
+  incompatibleEngines: string[]
   // Recognition results (populated only when a frame is provided)
   faceDetected: boolean
   embeddingDimension: number | null
@@ -140,6 +147,9 @@ export async function runFaceRecognitionDebug(
     engineEmbeddingDimension: null,
     engineHasLandmarks: null,
     landmarksDetected: null,
+    compatibleTemplateCount: null,
+    incompatibleTemplateCount: null,
+    incompatibleEngines: [],
     faceDetected: false,
     embeddingDimension: null,
     livenessPass: null,
@@ -281,6 +291,28 @@ export async function runFaceRecognitionDebug(
     report.embedderModel = faceEngines.embedderModel
     report.engineEmbeddingDimension = faceEngines.embeddingDimension
     report.engineHasLandmarks = faceEngines.hasLandmarks
+
+    // Cross-reference enrolled templates against the active engine.
+    // Templates enrolled with a different engine are silently skipped during recognition.
+    const compatible   = templates.filter(t => !t.embeddingEngine || t.embeddingEngine === faceEngines.kind)
+    const incompatible = templates.filter(t =>  t.embeddingEngine && t.embeddingEngine !== faceEngines.kind)
+    report.compatibleTemplateCount   = compatible.length
+    report.incompatibleTemplateCount = incompatible.length
+    report.incompatibleEngines       = [...new Set(incompatible.map(t => t.embeddingEngine).filter(Boolean))]
+    if (incompatible.length > 0) {
+      warnings.push(
+        `${incompatible.length} template(s) enrolled with engine(s) [${report.incompatibleEngines.join(', ')}] ` +
+        `will be skipped during recognition (active engine: ${faceEngines.kind}). ` +
+        'Employees enrolled with a different engine must re-enroll.',
+      )
+    }
+    if (compatible.length === 0 && templates.length > 0) {
+      errors.push(
+        `All ${templates.length} enrolled template(s) are incompatible with the active engine (${faceEngines.kind}). ` +
+        'No employees can be recognized until they re-enroll with this engine.',
+      )
+    }
+
     const engineDetail = [
       `kind=${faceEngines.kind}`,
       `detector=${faceEngines.detectorModel}`,
@@ -311,6 +343,7 @@ export async function runFaceRecognitionDebug(
         detector: faceEngines.detector,
         embedder: faceEngines.embedder,
         liveness: livenessEngine,
+        kind: faceEngines.kind,
       },
       // No snapshot in debug — avoid storage writes
       snapshotBlob: null,

@@ -16,6 +16,7 @@ import type {
   FaceDetection,
   FaceDetectorEngine,
   FaceEmbedderEngine,
+  FaceEngineKind,
   FaceLivenessEngine,
   FaceLivenessResult,
   FaceRecognitionEvent,
@@ -29,8 +30,15 @@ import { matchEmbedding, recordRecognitionEvent } from './faceRecognitionService
 export type RecognitionPipelineEngines = {
   detector: FaceDetectorEngine
   embedder: FaceEmbedderEngine
-  /** Optional liveness assessment, run after detection and before matching (Phase 7). Omit to skip liveness entirely (result.liveness will be null). */
+  /** Optional liveness assessment, run after detection and before matching. Omit to skip liveness entirely (result.liveness will be null). */
   liveness?: FaceLivenessEngine
+  /**
+   * Engine kind that produced these detector/embedder instances.
+   * When set, matching enforces strict engine compatibility — a faceapi probe
+   * is only compared to faceapi templates, an auraface probe only to auraface
+   * templates. Omit for backward compatibility (dimension-only guard applies).
+   */
+  kind?: FaceEngineKind
 }
 
 export type RecognitionPipelineContext = {
@@ -104,7 +112,7 @@ export async function runRecognitionPipeline(
       } else {
         const embedding = await engines.embedder.embed(frame, detection)
         recognitionResult = embedding
-          ? matchEmbedding(embedding.vector, context.enrolledTemplates, thresholds)
+          ? matchEmbedding(embedding.vector, context.enrolledTemplates, thresholds, engines.kind)
           : {
               status: 'rejected',
               employeeId: null,

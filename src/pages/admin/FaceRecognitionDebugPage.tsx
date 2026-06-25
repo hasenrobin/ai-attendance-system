@@ -302,6 +302,9 @@ export function FaceRecognitionDebugPage() {
         engineEmbeddingDimension: null,
         engineHasLandmarks: null,
         landmarksDetected: null,
+        compatibleTemplateCount: null,
+        incompatibleTemplateCount: null,
+        incompatibleEngines: [],
         faceDetected: false,
         embeddingDimension: null,
         livenessPass: null,
@@ -518,6 +521,18 @@ export function FaceRecognitionDebugPage() {
                       {report.landmarksDetected === null ? 'N/A'
                         : report.landmarksDetected ? 'Yes' : 'No'}
                     </span>
+                    {report.compatibleTemplateCount !== null && <>
+                      <span style={S.infoKey}>Compatible templates</span>
+                      <span style={{ ...S.infoVal, color: report.compatibleTemplateCount === 0 ? '#fca5a5' : '#86efac' }}>
+                        {report.compatibleTemplateCount} (engine={report.engineKind})
+                      </span>
+                    </>}
+                    {report.incompatibleTemplateCount !== null && report.incompatibleTemplateCount > 0 && <>
+                      <span style={S.infoKey}>Skipped templates</span>
+                      <span style={{ ...S.infoVal, color: '#fcd34d' }}>
+                        {report.incompatibleTemplateCount} from [{report.incompatibleEngines.join(', ')}] — engine mismatch, re-enroll required
+                      </span>
+                    </>}
                   </div>
                 )}
 

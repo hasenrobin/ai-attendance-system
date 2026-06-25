@@ -133,7 +133,12 @@ export async function processCameraFrame(
   } else {
     try {
       const defaultEngines = await createFaceEngines()
-      engines = { detector: defaultEngines.detector, embedder: defaultEngines.embedder, liveness: defaultLivenessEngine }
+      engines = {
+        detector: defaultEngines.detector,
+        embedder: defaultEngines.embedder,
+        liveness: defaultLivenessEngine,
+        kind: defaultEngines.kind,
+      }
     } catch (err) {
       return { cameraId, results: [], error: err instanceof Error ? err.message : String(err) }
     }

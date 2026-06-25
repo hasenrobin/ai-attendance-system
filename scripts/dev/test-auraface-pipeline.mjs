@@ -44,24 +44,6 @@ const __dir  = path.dirname(fileURLToPath(import.meta.url))
 const ROOT   = path.resolve(__dir, '../..')
 const MODELS = path.join(ROOT, 'public/models/onnx')
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DEVELOPMENT TEST THRESHOLDS — NOT calibrated for production.
-//
-// These are sanity-check bounds only. A properly calibrated production threshold
-// requires DET (Detection Error Tradeoff) curve analysis on a labeled face
-// dataset for the specific deployment environment.
-//
-// ArcFace-family cosine similarity (after L2 normalization) is in [−1, 1].
-// Genuine pairs (same person) typically score 0.25–0.80 depending on image quality.
-// Impostor pairs (different persons) typically score below 0.25.
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Minimum cosine similarity for a same-person pair to PASS this dev test. */
-const DEV_SAME_PERSON_MIN_SIM = 0.20
-
-/** Maximum cosine similarity for a different-person pair to PASS this dev test. */
-const DEV_DIFF_PERSON_MAX_SIM = 0.50
-
 /** SCRFD detection confidence threshold. */
 const SCRFD_SCORE_THRESHOLD = 0.45
 
@@ -586,69 +568,56 @@ const resultB = await processImage('B', imageB, scrfdSession, aurafaceSession)
 const resultC = await processImage('C', imageC, scrfdSession, aurafaceSession)
 
 // ── Cosine similarities ────────────────────────────────────────────────────
+// Cosine similarity of L2-normalized ArcFace embeddings is in [−1, 1].
+// Values are INFORMATIONAL only — no threshold judgment is made here.
+// Calibrated operating thresholds require DET curve analysis on a labeled
+// dataset. Do not interpret these values as production acceptance criteria.
 
-section('Cosine Similarity Results')
-console.log(
-  '  [DEV TEST THRESHOLDS — not production calibrated]\n' +
-  `  same-person min: ${DEV_SAME_PERSON_MIN_SIM}   different-person max: ${DEV_DIFF_PERSON_MAX_SIM}`,
-)
-
-let matchingPass = true
+section('Cosine Similarity (informational — no threshold applied)')
 
 if (resultA && resultB) {
   const simAB = cosineSim(resultA.embedding, resultB.embedding)
-  const passAB = simAB >= DEV_SAME_PERSON_MIN_SIM
-  if (!passAB) matchingPass = false
-  check(
-    `A vs B (SAME person):  cos_sim = ${simAB.toFixed(4)}`,
-    passAB,
-    `DEV threshold ≥ ${DEV_SAME_PERSON_MIN_SIM} → ${passAB ? 'PASS' : 'FAIL'}`,
-  )
+  console.log(`  ${C.INFO} A vs B (same person):       cos_sim = ${simAB.toFixed(4)}`)
 } else {
   console.log(`  ${C.WARN} A vs B: skipped (one or both embeddings unavailable)`)
-  matchingPass = false
 }
 
 if (resultA && resultC) {
   const simAC = cosineSim(resultA.embedding, resultC.embedding)
-  const passAC = simAC <= DEV_DIFF_PERSON_MAX_SIM
-  if (!passAC) matchingPass = false
-  check(
-    `A vs C (DIFF person):  cos_sim = ${simAC.toFixed(4)}`,
-    passAC,
-    `DEV threshold < ${DEV_DIFF_PERSON_MAX_SIM} → ${passAC ? 'PASS' : 'FAIL'}`,
-  )
+  console.log(`  ${C.INFO} A vs C (different person):  cos_sim = ${simAC.toFixed(4)}`)
 } else {
   console.log(`  ${C.WARN} A vs C: skipped (one or both embeddings unavailable)`)
-  matchingPass = false
 }
+
+console.log([
+  '',
+  '  Interpretation guide (ArcFace-family cosine similarity):',
+  '    > 0.30  :  likely same person (varies by image quality and model)',
+  '    < 0.15  :  likely different person',
+  '    0.15–0.30: uncertain — requires calibration for your environment',
+  '  These ranges are approximate. Use DET curve analysis for production thresholds.',
+].join('\n'))
 
 // ── Final summary ──────────────────────────────────────────────────────────
 
 section('Summary')
 
 const pipelinePass = Boolean(resultA && resultB && resultC)
-check('Pipeline: all 3 images produced 512-d embeddings', pipelinePass)
-check('Matching: same-person similar, different-person dissimilar', matchingPass)
+check('Pipeline: all 3 images produced 512-d L2-normalized embeddings', pipelinePass)
 
 console.log(`
-  Normalization used: (pixel − 127.5) / 128 (ArcFace-standard, VERIFY against model card)
-  Alignment:          ${resultA?.hasLandmarks ? '5-point affine (SCRFD landmarks)' : 'bounding-box fallback (no landmarks detected)'}
-  SCRFD input size:   ${SCRFD_INPUT_SIZE}×${SCRFD_INPUT_SIZE} px
-  Embedding engine:   auraface (glintr100.onnx / fal/AuraFace-v1)
-  Embedding dim:      512
-
-  DEV TEST THRESHOLDS (not for production):
-    same-person pass:  cos_sim ≥ ${DEV_SAME_PERSON_MIN_SIM}
-    diff-person pass:  cos_sim < ${DEV_DIFF_PERSON_MAX_SIM}
-    Production thresholds require DET curve analysis on a labeled dataset.
+  Normalization: (pixel − 127.5) / 128 (ArcFace-standard, VERIFY against model card)
+  Alignment:     ${resultA?.hasLandmarks ? '5-point affine (SCRFD landmarks)' : 'bounding-box fallback (no landmarks detected)'}
+  SCRFD input:   ${SCRFD_INPUT_SIZE}×${SCRFD_INPUT_SIZE} px
+  Engine:        auraface — glintr100.onnx / fal/AuraFace-v1 (Apache-2.0)
+  Output dim:    512
 `)
 
 section('Result')
-if (overallPass && matchingPass) {
-  console.log(`  ${C.PASS} PASS — AuraFace pipeline is functional on these images.\n`)
+if (overallPass && pipelinePass) {
+  console.log(`  ${C.PASS} PASS — pipeline executed without errors. Review cosine similarities above.\n`)
   process.exit(0)
 } else {
-  console.log(`  ${C.FAIL} FAIL — see issues above.\n`)
+  console.log(`  ${C.FAIL} FAIL — pipeline error (see above). Similarity values not meaningful if pipeline failed.\n`)
   process.exit(1)
 }

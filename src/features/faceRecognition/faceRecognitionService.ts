@@ -110,15 +110,22 @@ function euclideanDistance(a: number[], b: number[]): number | null {
   return Math.sqrt(sumSquares)
 }
 
-function warnEmbeddingDimensionMismatch(probeDimension: number, incompatible: EnrolledTemplate[]): void {
-  const dims = [...new Set(incompatible.map(t => t.embeddingDimension))].sort((a, b) => a - b)
+function warnIncompatibleTemplates(
+  probeDimension: number,
+  probeEngine: string | undefined,
+  incompatible: EnrolledTemplate[],
+  reason: 'engine' | 'dimension',
+): void {
+  const dims    = [...new Set(incompatible.map(t => t.embeddingDimension))].sort((a, b) => a - b)
   const engines = [...new Set(incompatible.map(t => t.embeddingEngine))]
+  const affected = [...new Set(incompatible.map(t => t.employeeId))]
+  const guardReason = reason === 'engine'
+    ? `engine mismatch (probe engine="${probeEngine}", template engines: [${engines.join(', ')}])`
+    : `dimension mismatch (probe=${probeDimension}, templates: [${dims.join(', ')}])`
   console.warn(
-    `[face-recognition] INCOMPATIBLE TEMPLATES SKIPPED: probe dimension=${probeDimension} ` +
-    `but ${incompatible.length} template(s) have dimension(s) [${dims.join(', ')}] ` +
-    `from engine(s) [${engines.join(', ')}]. ` +
-    'These employees will not be recognized until they re-enroll with the current engine. ' +
-    'Affected employee IDs: ' + [...new Set(incompatible.map(t => t.employeeId))].join(', '),
+    `[face-recognition] ${incompatible.length} INCOMPATIBLE TEMPLATE(S) SKIPPED — ${guardReason}. ` +
+    `Employees will not be recognized until they re-enroll with the current engine. ` +
+    `Affected employee IDs: ${affected.join(', ')}`,
   )
 }
 
@@ -128,28 +135,48 @@ function distanceToConfidence(distance: number, distanceNormalizer: number): num
 }
 
 /**
- * Compares a live embedding against all enrolled templates and returns the
- * best match plus a recognition status derived from `thresholds` (defaults to
- * DEFAULT_RECOGNITION_THRESHOLDS, i.e. the global faceRecognitionConfig values
- * — pass a company-resolved RecognitionThresholds for per-company overrides).
+ * Compares a live embedding against enrolled templates and returns the best
+ * match plus a recognition status derived from `thresholds`.
+ *
+ * Engine compatibility is enforced in two stages:
+ *  1. Engine guard (when `probeEngine` is provided): templates from a different
+ *     engine are excluded even if their embedding dimension happens to match.
+ *     E.g. auraface 512-d probes must NOT match against onnx_arcface 512-d
+ *     templates — the embedding spaces are different.
+ *  2. Dimension guard (always): templates whose dimension differs from the probe
+ *     are excluded. Catches legacy cross-engine comparisons when probeEngine is
+ *     not passed by the caller.
  *
  * Returns 'recognized' | 'low_confidence' | 'unknown' only — 'rejected' is a
- * pipeline-level outcome (e.g. detection confidence too low to attempt
- * matching at all) and is decided by the caller before this function runs.
+ * pipeline-level outcome (detection quality too low, liveness failure) decided
+ * by the caller before this function runs.
  */
 export function matchEmbedding(
   embedding: number[],
   templates: EnrolledTemplate[],
   thresholds: RecognitionThresholds = DEFAULT_RECOGNITION_THRESHOLDS,
+  probeEngine?: string,
 ): RecognitionResult {
-  // Pre-filter: only compare templates whose dimension matches the probe.
-  // Cross-dimension (= cross-engine) comparisons are meaningless and silently
-  // return wrong results. Warn explicitly so ops can detect the misconfiguration.
-  const compatibleTemplates = templates.filter(t => t.embeddingDimension === embedding.length)
-  const incompatibleTemplates = templates.filter(t => t.embeddingDimension !== embedding.length)
+  // Stage 1 — Engine guard (strict, when probeEngine is known).
+  // Different engines produce incomparable embedding spaces. 512-d auraface
+  // embeddings must not be compared to 512-d arcface embeddings.
+  let engineFiltered = templates
+  let engineRejected: EnrolledTemplate[] = []
+  if (probeEngine) {
+    engineFiltered  = templates.filter(t => !t.embeddingEngine || t.embeddingEngine === probeEngine)
+    engineRejected  = templates.filter(t =>  t.embeddingEngine && t.embeddingEngine !== probeEngine)
+    if (engineRejected.length > 0) {
+      warnIncompatibleTemplates(embedding.length, probeEngine, engineRejected, 'engine')
+    }
+  }
 
-  if (incompatibleTemplates.length > 0) {
-    warnEmbeddingDimensionMismatch(embedding.length, incompatibleTemplates)
+  // Stage 2 — Dimension guard (catches remaining dimension mismatches).
+  const compatibleTemplates   = engineFiltered.filter(t => t.embeddingDimension === embedding.length)
+  const dimensionRejected     = engineFiltered.filter(t => t.embeddingDimension !== embedding.length)
+  const incompatibleTemplates = [...engineRejected, ...dimensionRejected]
+
+  if (dimensionRejected.length > 0) {
+    warnIncompatibleTemplates(embedding.length, probeEngine, dimensionRejected, 'dimension')
   }
 
   const candidates: FaceMatch[] = compatibleTemplates
@@ -168,9 +195,10 @@ export function matchEmbedding(
     .sort((a, b) => a.distance - b.distance)
 
   if (candidates.length === 0) {
-    const hasTemplates = templates.length > 0
+    const hasTemplates          = templates.length > 0
     const hasCompatibleTemplates = compatibleTemplates.length > 0
-    const hasIncompatible = incompatibleTemplates.length > 0
+    const hasIncompatible       = incompatibleTemplates.length > 0
+    const incompatibleEngines   = [...new Set(incompatibleTemplates.map(t => t.embeddingEngine).filter(Boolean))]
     return {
       status: 'unknown',
       employeeId: null,
@@ -181,13 +209,17 @@ export function matchEmbedding(
         ? ['No approved face templates are enrolled for this company.']
         : hasIncompatible && !hasCompatibleTemplates
           ? [
-              `All ${templates.length} enrolled template(s) were produced by a different engine and cannot be compared ` +
-              `(probe dimension=${embedding.length}, template engines: ` +
-              [...new Set(incompatibleTemplates.map(t => t.embeddingEngine))].join(', ') +
-              '). Employees must re-enroll with the current engine before recognition works.',
+              `All ${templates.length} enrolled template(s) are incompatible with the current engine` +
+              (probeEngine ? ` (active engine="${probeEngine}"` : '') +
+              `, template engines: [${incompatibleEngines.join(', ')}]). ` +
+              'Employees must re-enroll with the active engine before recognition works.',
             ]
           : !hasCompatibleTemplates
-            ? [`No enrolled templates are compatible with the probe embedding dimension (${embedding.length}). Re-enrollment with a matching face engine is required.`]
+            ? [
+                `No enrolled templates are compatible with the active engine` +
+                (probeEngine ? ` "${probeEngine}"` : '') +
+                ` (probe dimension=${embedding.length}). Re-enrollment is required.`,
+              ]
             : [`No enrolled template is within the match distance threshold (${thresholds.matchDistanceThreshold}).`],
     }
   }

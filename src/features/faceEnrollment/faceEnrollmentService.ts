@@ -13,7 +13,7 @@ const SESSION_COLUMNS =
   'id, company_id, employee_id, status, started_at, completed_at, quality_score, liveness_score, device_info, metadata, rejection_reason, created_at, updated_at'
 
 const TEMPLATE_COLUMNS =
-  'id, company_id, employee_id, session_id, embedding, pose, quality_score, embedding_dimension, embedding_engine, embedding_model, created_at'
+  'id, company_id, employee_id, session_id, embedding, pose, quality_score, embedding_dimension, embedding_engine, embedding_model, detector_model, alignment_used, created_at'
 
 const PROFILE_COLUMNS =
   'employee_id, company_id, primary_template_id, profile_photo_url, enrollment_status, last_enrollment_at, active_session_id, updated_at'
@@ -68,10 +68,14 @@ export type CompleteSessionTemplate = {
   quality_score: number | null
   /** Dimension of the embedding vector — must match the length of `embedding`. */
   embedding_dimension: number
-  /** Engine that produced this embedding (e.g. 'faceapi'). */
+  /** Engine that produced this embedding (e.g. 'faceapi', 'auraface', 'onnx_arcface'). */
   embedding_engine: string
-  /** Model checkpoint within the engine (e.g. 'face_recognition_model'). */
+  /** Model checkpoint within the engine (e.g. 'face_recognition_model', 'glintr100'). */
   embedding_model: string
+  /** Detector model used during this enrollment (e.g. 'tiny_face_detector', 'scrfd'). */
+  detector_model: string
+  /** Whether 5-point affine alignment was applied before embedding. */
+  alignment_used: boolean
 }
 
 export type CompleteSessionParams = {
@@ -141,6 +145,8 @@ export async function completeEnrollmentSession(params: CompleteSessionParams): 
     embedding_dimension: template.embedding_dimension,
     embedding_engine: template.embedding_engine,
     embedding_model: template.embedding_model,
+    detector_model: template.detector_model,
+    alignment_used: template.alignment_used,
   }))
 
   const { data: insertedTemplates, error: templateError } = await supabase

@@ -31,12 +31,16 @@ export type FaceTemplate = {
   embedding: number[]
   pose: PoseId
   quality_score: number | null
-  /** Length of the embedding vector. Added by migration 20260624000000. Defaults to 128 for legacy rows. */
+  /** Length of the embedding vector. Defaults to 128 for legacy rows. */
   embedding_dimension: number
-  /** Engine that produced this embedding (faceapi | onnx_arcface). Defaults to 'faceapi' for legacy rows. */
+  /** Engine that produced this embedding (faceapi | auraface | onnx_arcface). Defaults to 'faceapi' for legacy rows. */
   embedding_engine: string
   /** Model checkpoint within the engine. Defaults to 'face_recognition_model' for legacy rows. */
   embedding_model: string
+  /** Detector model used during enrollment (e.g. 'tiny_face_detector', 'scrfd'). NULL for legacy rows. */
+  detector_model: string | null
+  /** True when 5-point affine alignment was applied before embedding. false for legacy faceapi rows. */
+  alignment_used: boolean
   created_at: string
 }
 
