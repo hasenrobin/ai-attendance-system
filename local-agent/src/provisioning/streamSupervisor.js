@@ -1,10 +1,12 @@
 import { spawn } from 'node:child_process'
 import { isHlsReady } from './hlsCheck.js'
 import { redact } from './rtspUrl.js'
+import { createAgentApiClient } from '../api/agentApiClient.js'
 import {
   FFMPEG_PATH,
   MEDIAMTX_RTSP_BASE,
   SRT_PUBLISH_BASE_URL,
+  WEBRTC_PUBLIC_BASE_URL,
   buildPassthroughArgs,
   buildSrtPublishArgs,
   buildTranscodeArgs,
@@ -18,6 +20,16 @@ const HEALTH_LOG_EVERY_MS = 60_000
 
 const streams = new Map() // pathName -> runtime state
 let supervisorTimer = null
+let metadataClient = null
+
+function joinBaseUrl(baseUrl, pathName) {
+  return `${baseUrl.replace(/\/$/, '')}/${pathName.replace(/^\//, '')}`
+}
+
+function webrtcUrlFor(pathName) {
+  if (!WEBRTC_PUBLIC_BASE_URL) return null
+  return `${joinBaseUrl(WEBRTC_PUBLIC_BASE_URL, pathName)}/whep`
+}
 
 function publicEntry(state) {
   return {
@@ -36,6 +48,8 @@ function publicEntry(state) {
     resolvedRtspUrl: state.resolvedRtspUrl ?? null,
     selectedRtspPath: state.selectedRtspPath ?? null,
     selectedStreamKind: state.selectedStreamKind ?? null,
+    metadataRefreshKey: state.metadataRefreshKey ?? null,
+    metadataRefreshedAt: state.metadataRefreshedAt ?? null,
   }
 }
 
@@ -184,6 +198,60 @@ function spawnFfmpegForState(state) {
   )
 }
 
+function metadataRefreshKeyFor(state) {
+  const transport = state.activePublishTransport ?? state.publishTransport ?? 'unknown'
+  return [
+    state.cameraId,
+    state.pathName,
+    transport,
+    state.webrtcUrl ?? '',
+    state.hlsUrl ?? '',
+  ].join('|')
+}
+
+async function refreshStreamMetadata(state) {
+  if (!metadataClient) return
+  if (!state.cameraId || !state.pathName) return
+
+  const transport = state.activePublishTransport ?? state.publishTransport ?? 'unknown'
+  if (transport !== 'srt') return
+
+  const webrtcUrl = state.webrtcUrl ?? webrtcUrlFor(state.pathName)
+  if (!webrtcUrl) return
+
+  const refreshKey = metadataRefreshKeyFor({ ...state, webrtcUrl })
+  if (state.metadataRefreshInFlight || state.metadataRefreshKey === refreshKey) return
+
+  state.metadataRefreshInFlight = true
+  try {
+    await metadataClient.requestAction('agent_refresh_stream_metadata', {
+      camera_id: state.cameraId,
+      stream_type: 'webrtc',
+      live_stream_url: webrtcUrl,
+      hls_fallback_url: state.hlsUrl ?? null,
+      publish_transport: transport,
+      path_name: state.pathName,
+    })
+
+    state.webrtcUrl = webrtcUrl
+    state.metadataRefreshKey = refreshKey
+    state.metadataRefreshedAt = new Date().toISOString()
+    persistStreams()
+
+    console.log(
+      `[stream-supervisor] stream metadata refreshed camera=${state.cameraId} ` +
+      `path=${state.pathName} streamType=webrtc live=${webrtcUrl}`,
+    )
+  } catch (err) {
+    console.warn(
+      `[stream-supervisor] stream metadata refresh failed camera=${state.cameraId} ` +
+      `path=${state.pathName} error=${err?.message ?? String(err)}`,
+    )
+  } finally {
+    state.metadataRefreshInFlight = false
+  }
+}
+
 async function superviseOnce() {
   const now = Date.now()
 
@@ -232,6 +300,8 @@ async function superviseOnce() {
         `pid=${state.process?.pid ?? 'unknown'} url=${state.hlsUrl}`,
       )
     }
+
+    await refreshStreamMetadata(state)
   }
 }
 
@@ -248,7 +318,7 @@ export function registerManagedStream(entry) {
     srtPublishUrl: entry.srtPublishUrl ?? (SRT_PUBLISH_BASE_URL ? srtPublishUrlFor(pathName) : ''),
     publishTransport: entry.publishTransport ?? (SRT_PUBLISH_BASE_URL ? 'srt' : 'rtsp'),
     fallbackAfterRestarts: entry.fallbackAfterRestarts ?? 3,
-    webrtcUrl: entry.webrtcUrl ?? null,
+    webrtcUrl: entry.webrtcUrl ?? webrtcUrlFor(pathName),
     hlsUrl: entry.hlsUrl,
     useTranscode: Boolean(entry.useTranscode),
     registeredAt: entry.registeredAt ?? new Date().toISOString(),
@@ -263,6 +333,8 @@ export function registerManagedStream(entry) {
     lastHlsReady: existing?.lastHlsReady ?? null,
     lastHlsCheckedAt: existing?.lastHlsCheckedAt ?? null,
     lastHealthLogAt: existing?.lastHealthLogAt ?? 0,
+    metadataRefreshKey: existing?.metadataRefreshKey ?? entry.metadataRefreshKey ?? null,
+    metadataRefreshedAt: existing?.metadataRefreshedAt ?? entry.metadataRefreshedAt ?? null,
   }
 
   streams.set(pathName, state)
@@ -292,14 +364,24 @@ export function unregisterManagedStream(pathName, reason = 'unregistered') {
   console.log(`[stream-supervisor] stream unregistered path=${pathName} reason=${reason}`)
 }
 
-export function startStreamSupervisor() {
+export function startStreamSupervisor(identity = null) {
   if (supervisorTimer) return
+  if (identity?.agentId && identity?.token) {
+    try {
+      metadataClient = createAgentApiClient(identity)
+    } catch (err) {
+      metadataClient = null
+      console.warn(`[stream-supervisor] metadata refresh disabled: ${err?.message ?? String(err)}`)
+    }
+  }
 
   const saved = loadStreamState()
   console.log(`[stream-supervisor] state=${streamStatePath()} saved_streams=${saved.length}`)
   for (const entry of saved) {
+    const pathName = entry.pathName
     streams.set(entry.pathName, {
       ...entry,
+      webrtcUrl: entry.webrtcUrl ?? (pathName ? webrtcUrlFor(pathName) : null),
       process: null,
       restartAttempt: 0,
       restartCount: 0,

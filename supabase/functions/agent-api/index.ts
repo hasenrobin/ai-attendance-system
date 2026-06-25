@@ -31,6 +31,11 @@ type AgentApiPayload = {
   job_type?: string
   provision_mode?: string | null
   result?: Record<string, unknown> | null
+  stream_type?: string
+  live_stream_url?: string
+  hls_fallback_url?: string | null
+  publish_transport?: string
+  path_name?: string
 }
 
 type CustomerAgentRow = {
@@ -67,6 +72,12 @@ type ProvisionJobRow = {
   created_at: string
   started_at: string | null
   completed_at: string | null
+}
+
+type CameraOwnershipRow = {
+  id: string
+  company_id: string
+  branch_id: string | null
 }
 
 function requestIp(req: Request): string | null {
@@ -494,6 +505,47 @@ async function loadDiscoveryJob(supabase: SupabaseClient, jobId: string): Promis
 
 function agentCanHandleBranch(agent: AuthenticatedAgent, jobBranchId: string | null): boolean {
   return agent.branch_id === null || jobBranchId === null || agent.branch_id === jobBranchId
+}
+
+function normalizeStreamType(value: unknown): 'webrtc' | 'hls' | null {
+  if (value === 'webrtc' || value === 'hls') return value
+  return null
+}
+
+function normalizePublishTransport(value: unknown): 'srt' | 'rtsp' | null {
+  if (value === 'srt' || value === 'rtsp') return value
+  return null
+}
+
+function normalizePublicHttpUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null
+
+  try {
+    const url = new URL(value.trim())
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null
+    if (url.username || url.password) return null
+    return url.toString()
+  } catch {
+    return null
+  }
+}
+
+async function loadCameraForAgent(
+  supabase: SupabaseClient,
+  cameraId: string,
+  agent: AuthenticatedAgent,
+): Promise<CameraOwnershipRow | null> {
+  const { data, error } = await supabase
+    .from('cameras')
+    .select('id, company_id, branch_id')
+    .eq('id', cameraId)
+    .eq('company_id', agent.company_id)
+    .maybeSingle()
+
+  if (error || !data) return null
+  const camera = data as CameraOwnershipRow
+  if (!agentCanHandleBranch(agent, camera.branch_id)) return null
+  return camera
 }
 
 function normalizeDiscoveryResult(result: Record<string, unknown>, companyId: string, jobId: string): Record<string, unknown> {
@@ -1083,6 +1135,7 @@ async function agentSubmitProvisionResult(
           updated_at: now,
         })
         .eq('id', typedJob.camera_id)
+        .eq('company_id', auth.agent.company_id)
     }
   }
 
@@ -1100,6 +1153,83 @@ async function agentSubmitProvisionResult(
   })
 
   return jsonResponse({ status: nextStatus, job: typedJob })
+}
+
+// Agent: refresh camera stream metadata for already-provisioned streams. This
+// upgrades persisted HLS rows when a newer agent restores the stream through
+// SRT/WebRTC without creating a new provision job.
+async function agentRefreshStreamMetadata(
+  supabase: SupabaseClient,
+  req: Request,
+  tokenPepper: string,
+  payload: AgentApiPayload,
+): Promise<Response> {
+  const auth = await authenticateAgentRequest(supabase, req, tokenPepper)
+  if (!auth.ok) return jsonResponse({ error: auth.error }, auth.status)
+
+  const cameraId = payload.camera_id?.trim()
+  if (!cameraId) return jsonResponse({ error: 'camera_id is required.' }, 400)
+
+  const streamType = normalizeStreamType(payload.stream_type)
+  if (!streamType) return jsonResponse({ error: 'stream_type must be "webrtc" or "hls".' }, 400)
+
+  const liveStreamUrl = normalizePublicHttpUrl(payload.live_stream_url)
+  if (!liveStreamUrl) return jsonResponse({ error: 'live_stream_url must be a public http(s) URL without credentials.' }, 400)
+
+  const hlsFallbackUrl = payload.hls_fallback_url === null || payload.hls_fallback_url === undefined
+    ? null
+    : normalizePublicHttpUrl(payload.hls_fallback_url)
+  if (payload.hls_fallback_url && !hlsFallbackUrl) {
+    return jsonResponse({ error: 'hls_fallback_url must be a public http(s) URL without credentials.' }, 400)
+  }
+
+  const publishTransport = normalizePublishTransport(payload.publish_transport)
+  const pathName = typeof payload.path_name === 'string' && payload.path_name.trim()
+    ? payload.path_name.trim()
+    : null
+
+  const camera = await loadCameraForAgent(supabase, cameraId, auth.agent)
+  if (!camera) return jsonResponse({ error: 'Camera not found for this agent.' }, 404)
+
+  const now = new Date().toISOString()
+  const { data: updatedCamera, error } = await supabase
+    .from('cameras')
+    .update({
+      stream_type: streamType,
+      live_stream_url: liveStreamUrl,
+      updated_at: now,
+    })
+    .eq('id', camera.id)
+    .eq('company_id', auth.agent.company_id)
+    .select('id, company_id, branch_id, stream_type, live_stream_url, updated_at')
+    .single()
+
+  if (error) {
+    await audit(supabase, req, {
+      agent_id: auth.agent.id,
+      company_id: auth.agent.company_id,
+      event_type: 'stream_metadata_refresh_failed',
+      success: false,
+      details: { camera_id: cameraId, message: error.message },
+    })
+    return jsonResponse({ error: 'Failed to refresh stream metadata.' }, 500)
+  }
+
+  await audit(supabase, req, {
+    agent_id: auth.agent.id,
+    company_id: auth.agent.company_id,
+    event_type: 'stream_metadata_refreshed',
+    success: true,
+    details: {
+      camera_id: cameraId,
+      stream_type: streamType,
+      publish_transport: publishTransport,
+      path_name: pathName,
+      hls_fallback_url: hlsFallbackUrl,
+    },
+  })
+
+  return jsonResponse({ status: 'updated', camera: updatedCamera })
 }
 
 async function heartbeat(
@@ -1219,6 +1349,10 @@ Deno.serve(async (req: Request) => {
     return agentSubmitProvisionResult(supabase, req, tokenPepper, payload)
   }
 
+  if (action === 'agent_refresh_stream_metadata') {
+    return agentRefreshStreamMetadata(supabase, req, tokenPepper, payload)
+  }
+
   const admin = await requirePlatformAdmin(req, supabaseUrl, anonKey)
   if (!admin.ok) return jsonResponse({ error: admin.error }, admin.status)
 
@@ -1291,6 +1425,7 @@ Deno.serve(async (req: Request) => {
       'agent_get_provision_jobs',
       'agent_claim_provision_job',
       'agent_submit_provision_result',
+      'agent_refresh_stream_metadata',
     ],
   }, 400)
 })

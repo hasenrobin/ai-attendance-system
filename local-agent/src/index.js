@@ -129,7 +129,7 @@ if (!identity) {
 
   // ── 3. Watchdog: restart MediaMTX if it crashes later ─────────────────────
   startMediaMtxWatchdog(writeStartupLog)
-  startStreamSupervisor()
+  startStreamSupervisor(identity)
 
   // ── 4. Local provisioning HTTP API (port 8787, legacy browser→agent path) ──
   startProvisioningApi()
