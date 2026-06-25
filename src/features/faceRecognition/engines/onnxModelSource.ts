@@ -31,10 +31,23 @@ import { FaceEngineNotConfiguredError } from './faceEngineErrors'
 export const ONNX_MODEL_PATHS = {
   /** Legacy RFB-320 detector — no landmarks. Not used by the V2 engine factory. */
   detector: 'models/onnx/face_detector.onnx',
-  /** SCRFD-2.5G-bnkps or SCRFD-10G-bnkps detector with 5-point landmark output. */
+
+  /** SCRFD-2.5G-bnkps or SCRFD-10G-bnkps detector with 5-point landmark output.
+   *  Shared by onnx_arcface and auraface engine kinds.
+   *  Source: InsightFace buffalo_s (det_2.5g.onnx) or buffalo_l (det_10g.onnx). */
   scrfd: 'models/onnx/scrfd.onnx',
-  /** ArcFace ResNet-50 or ResNet-100 embedder, 512-d output. */
+
+  /** ArcFace ResNet-50 or MobileFaceNet embedder, 512-d output.
+   *  Source: InsightFace buffalo_l/buffalo_s.
+   *  NOTE: InsightFace models are non-commercial research only.
+   *  Prefer auraface for commercial deployments. */
   embedder: 'models/onnx/arcface.onnx',
+
+  /** AuraFace-v1 embedder, 512-d output, Apache-2.0 licensed.
+   *  Source: https://huggingface.co/fal/AuraFace-v1
+   *  See docs/ai-models/AURAFACE_LICENSE_NOTES.md before deploying commercially.
+   *  Place the ONNX export at: public/models/onnx/auraface.onnx */
+  auraface: 'models/onnx/auraface.onnx',
 } as const
 
 export type ModelBytesLoader = (relativePath: string) => Promise<ArrayBuffer>

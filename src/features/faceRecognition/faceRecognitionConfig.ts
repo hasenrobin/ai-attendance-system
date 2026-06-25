@@ -10,7 +10,7 @@ import type { FaceEngineKind } from '../../types/faceRecognition'
 // Engine selection (Phase 7)
 // ---------------------------------------------------------------------------
 
-const VALID_FACE_ENGINE_KINDS: FaceEngineKind[] = ['faceapi', 'onnx_arcface', 'insightface']
+const VALID_FACE_ENGINE_KINDS: FaceEngineKind[] = ['faceapi', 'onnx_arcface', 'auraface', 'insightface']
 
 /** The engine createFaceEngines() falls back to when FACE_ENGINE is unset or invalid. */
 export const DEFAULT_FACE_ENGINE: FaceEngineKind = 'faceapi'

@@ -83,15 +83,24 @@ export interface FaceEmbedderEngine {
 
 /**
  * Selects which detector/embedder implementation createFaceEngines() returns.
- *  - 'faceapi': @vladmandic/face-api (TinyFaceDetector + 128-d descriptors). Browser/DOM only.
- *    This is the prototype engine — current default/fallback.
- *  - 'onnx_arcface': ONNX Runtime + ArcFace-compatible 512-d embedding model. Works with
- *    both DOM frames and RawImageFrame (worker). Requires model files under public/models/onnx —
- *    see ONNX_MODEL_PATHS. Fails honestly with FaceEngineNotConfiguredError if missing.
- *  - 'insightface': reserved for a future dedicated InsightFace backend. Not implemented —
- *    always fails honestly with FaceEngineNotConfiguredError.
+ *
+ *  'faceapi'      — @vladmandic/face-api (TinyFaceDetector + 128-d FaceRecognitionNet).
+ *                   Browser/DOM only. Default — no model files required.
+ *
+ *  'onnx_arcface' — SCRFD-2.5G detector + ArcFace R50/MobileFaceNet 512-d embedder.
+ *                   Requires public/models/onnx/scrfd.onnx + public/models/onnx/arcface.onnx.
+ *                   NOTE: InsightFace models have non-commercial research restrictions.
+ *                   Use 'auraface' for commercial deployments.
+ *
+ *  'auraface'     — SCRFD-2.5G detector + AuraFace-v1 512-d embedder (fal/AuraFace-v1,
+ *                   Apache-2.0 licensed). Commercially-friendly alternative to onnx_arcface.
+ *                   Requires public/models/onnx/scrfd.onnx + public/models/onnx/auraface.onnx.
+ *                   See docs/ai-models/AURAFACE_LICENSE_NOTES.md.
+ *
+ *  'insightface'  — Reserved for a future dedicated InsightFace backend. Not implemented.
+ *                   Always throws FaceEngineNotConfiguredError.
  */
-export type FaceEngineKind = 'faceapi' | 'onnx_arcface' | 'insightface'
+export type FaceEngineKind = 'faceapi' | 'onnx_arcface' | 'auraface' | 'insightface'
 
 export type FaceEngines = {
   kind: FaceEngineKind

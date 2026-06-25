@@ -37,3 +37,11 @@ camera-proxy/*.exe
 installer/build/
 installer/output/
 
+# ONNX model files — large binary assets acquired separately per deployment.
+# Checksums (CHECKSUMS.sha256) are committed; the .onnx files themselves are not.
+# Acquisition: see docs/ai-models/AURAFACE_LICENSE_NOTES.md
+#   scrfd.onnx   — SCRFD-2.5G-bnkps detector (InsightFace model zoo)
+#   arcface.onnx — ArcFace R50 embedder (InsightFace, non-commercial research)
+#   auraface.onnx— AuraFace-v1 embedder (fal/AuraFace-v1, Apache-2.0)
+public/models/onnx/
+
